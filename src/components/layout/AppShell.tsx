@@ -55,18 +55,36 @@ export function AppShell({
 
   if (loading || !user || !allowed.includes(user.role)) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-surface-50 dark:bg-surface-900">
-        <div className="animate-spin h-8 w-8 border-2 border-primary-600 rounded-full border-t-transparent" />
+      <div
+        className="min-h-screen flex items-center justify-center"
+        style={{ background: "var(--surface)" }}
+      >
+        <div className="flex flex-col items-center gap-4">
+          <div
+            className="w-10 h-10 rounded-xl flex items-center justify-center"
+            style={{ background: "linear-gradient(135deg, #002046 0%, #1b365d 100%)" }}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 21h18M9 21V7l4-4 4 4v14M9 12h6" />
+            </svg>
+          </div>
+          <div
+            className="w-6 h-6 rounded-full border-2 animate-spin"
+            style={{ borderColor: "var(--outline-variant)", borderTopColor: "#002046" }}
+          />
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-surface-50 dark:bg-surface-900">
+    <div className="min-h-screen" style={{ background: "var(--surface)" }}>
       <Sidebar unreadCount={unread} />
       <div className="lg:pl-64 flex flex-col min-h-screen">
         <Topbar />
-        <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6 sm:py-8">{children}</main>
+        <main className="flex-1 max-w-[1400px] w-full mx-auto px-4 sm:px-6 lg:px-8 py-7 sm:py-9">
+          {children}
+        </main>
       </div>
     </div>
   );

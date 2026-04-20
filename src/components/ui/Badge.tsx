@@ -8,21 +8,48 @@ interface BadgeProps {
   children?: React.ReactNode;
 }
 
+const chipStyles: Record<string, React.CSSProperties> = {
+  draft: { background: "var(--surface-container-high)", color: "var(--on-surface-variant)" },
+  pending: { background: "#dde4ef", color: "#405060" },
+  pending_dean: { background: "#dde4ef", color: "#405060" },
+  pending_science: { background: "#d4e3ff", color: "#002046" },
+  needs_revision: { background: "#ffdad6", color: "#410002" },
+  approved: { background: "#b7eece", color: "#00210f" },
+  rejected: { background: "#ffdad6", color: "#410002" },
+  neutral: { background: "var(--surface-container-high)", color: "var(--on-surface-variant)" },
+  info: { background: "#d4e3ff", color: "#002046" },
+};
+
+const chipDots: Record<string, string> = {
+  approved: "#1a5c3e",
+  pending: "#405060",
+  pending_dean: "#405060",
+  pending_science: "#002046",
+  needs_revision: "#ba1a1a",
+  rejected: "#ba1a1a",
+  draft: "var(--outline)",
+  neutral: "var(--outline)",
+  info: "#002046",
+};
+
 export const Badge: React.FC<BadgeProps> = ({ status, className = "", children }) => {
-  const styles = {
-    draft: "bg-surface-200 text-surface-700 dark:bg-surface-700 dark:text-surface-300",
-    pending: "bg-warning-100 text-warning-700 dark:bg-warning-900/30 dark:text-warning-500",
-    pending_dean: "bg-warning-100 text-warning-700 dark:bg-warning-900/30 dark:text-warning-500",
-    pending_science: "bg-primary-100 text-primary-700 dark:bg-primary-900/30 dark:text-primary-400",
-    needs_revision: "bg-danger-100 text-danger-700 dark:bg-danger-900/30 dark:text-danger-500",
-    approved: "bg-success-100 text-success-700 dark:bg-success-900/30 dark:text-success-500",
-    rejected: "bg-danger-100 text-danger-700 dark:bg-danger-900/30 dark:text-danger-500",
-    neutral: "bg-surface-200 text-surface-700 dark:bg-surface-700 dark:text-surface-300",
-    info: "bg-primary-100 text-primary-700 dark:bg-primary-900/30 dark:text-primary-400",
-  };
+  const style = chipStyles[status] ?? chipStyles.neutral;
+  const dotColor = chipDots[status] ?? "currentColor";
 
   return (
-    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${styles[status]} ${className}`}>
+    <span
+      className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full font-medium ${className}`}
+      style={{
+        ...style,
+        fontSize: "0.6875rem",
+        letterSpacing: "0.04em",
+        fontFamily: "'Public Sans', sans-serif",
+      }}
+    >
+      <span
+        className="w-1.5 h-1.5 rounded-full shrink-0"
+        style={{ background: dotColor }}
+      />
       {children || STATUS_LABELS[status as string] || status}
     </span>
   );
