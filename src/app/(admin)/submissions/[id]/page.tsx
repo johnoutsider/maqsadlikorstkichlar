@@ -262,7 +262,7 @@ export default function SubmissionDetailPage() {
       <div className="p-8 text-center">
         <p className="text-danger-600">{error || "Topilmadi"}</p>
         <Link href="/submissions" className="text-primary-600 hover:underline text-sm mt-4 inline-block">
-          ÃƒÂ¢Ã¢â‚¬Â Ã‚Â Orqaga
+          Orqaga
         </Link>
       </div>
     );
@@ -295,7 +295,7 @@ export default function SubmissionDetailPage() {
 
   return (
     <div>
-      <Link href="/submissions" className="text-sm text-primary-600 hover:underline">ÃƒÂ¢Ã¢â‚¬Â Ã‚Â Orqaga</Link>
+      <Link href="/submissions" className="text-sm text-primary-600 hover:underline">Orqaga</Link>
 
       <div className="flex items-center justify-between mt-2 mb-6 gap-3 flex-wrap">
         <div>
@@ -329,7 +329,7 @@ export default function SubmissionDetailPage() {
         <table className="w-full">
           <thead className="bg-surface-50 dark:bg-surface-900/50 border-b border-surface-200 dark:border-surface-700">
             <tr>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-surface-600 uppercase w-16">ÃƒÂ¢Ã¢â‚¬Å¾—œ</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-surface-600 uppercase w-16">№</th>
               <th className="px-4 py-3 text-left text-xs font-semibold text-surface-600 uppercase">Ko&apos;rsatkich</th>
               <th className="px-4 py-3 text-left text-xs font-semibold text-surface-600 uppercase w-20">Birlik</th>
               <th className="px-4 py-3 text-left text-xs font-semibold text-surface-600 uppercase w-24">Maqsad</th>
@@ -493,7 +493,7 @@ export default function SubmissionDetailPage() {
                   <ul className="mt-2 space-y-0.5">
                     {entry.details.map((detail, idx) => (
                       <li key={`${entry.key}-${idx}`} className="text-sm text-surface-700 dark:text-surface-300">
-                        â€¢ {detail}
+                        • {detail}
                       </li>
                     ))}
                   </ul>
