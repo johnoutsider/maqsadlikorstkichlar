@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm list:*)",
+      "Bash(node -e \"const {format} = require\\('date-fns'\\); const {uz} = require\\('date-fns/locale'\\); console.log\\('OK', format\\(new Date\\(\\), 'yyyy', {locale: uz}\\)\\)\")",
+      "Bash(npx firebase:*)",
+      "Bash(npm run:*)",
+      "Bash(npm install:*)",
+      "Bash(npx tsc:*)",
+      "Bash(rm -rf \"src/app/\\(dashboard\\)\")",
+      "Bash(rm -rf \"src/app/api/provision\" \"src/app/api/debug\" \"src/app/api/export\" \"src/app/api/telegram\")",
+      "Bash(rm -f \"src/contexts/AuthContext.tsx\")",
+      "Bash(rm -f \"src/lib/firebase.ts\" \"src/lib/firebase-admin.ts\" \"src/lib/firestore.ts\" \"src/lib/storage.ts\" \"src/lib/notifications.ts\" \"src/lib/telegram.ts\" \"src/lib/export.ts\")",
+      "Bash(rm -f \"src/hooks/useAuth.ts\" \"src/hooks/useIndicators.ts\" \"src/hooks/useNotifications.ts\" \"src/hooks/useSubmission.ts\" \"src/hooks/useTargets.ts\")",
+      "Bash(rm -f \"src/components/ui/FileUpload.tsx\")",
+      "Bash(rm -rf .next)",
+      "Bash(rm -rf \".next/types\")"
+    ]
+  }
+}
