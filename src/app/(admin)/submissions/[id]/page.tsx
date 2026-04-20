@@ -148,7 +148,7 @@ export default function SubmissionDetailPage() {
     // Require a rejection comment for each rejected indicator.
     for (const ind of indicators) {
       if (decisions[ind.id] === "rejected" && !comments[ind.id]?.trim()) {
-        setError(`"${ind.no}. ${ind.name}" ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â rad etish sababini kiriting.`);
+        setError(`"${ind.no}. ${ind.name}" — rad etish sababini kiriting.`);
         return;
       }
     }
@@ -220,7 +220,7 @@ export default function SubmissionDetailPage() {
       await notifyScienceDepartment(supabase, {
         universityId: submission.university_id,
         title: "Hisobot ilmiy bo'lim ko'rib chiqishi uchun tayyor",
-        message: `${department?.name ?? ""} ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â ${submission.year} ${submission.quarter} hisobot dekan tomonidan tasdiqlandi.`,
+        message: `${department?.name ?? ""} — ${submission.year} ${submission.quarter} hisobot dekan tomonidan tasdiqlandi.`,
         data: { submission_id: submission.id },
       });
     } else if (nextStatus === "needs_revision") {
@@ -306,7 +306,7 @@ export default function SubmissionDetailPage() {
             </span>
           </h1>
           <p className="text-sm text-surface-500 dark:text-surface-400 mt-1">
-            {faculty?.name} Ãƒâ€šÃ‚Â· {submission.year} {submission.quarter}
+            {faculty?.name} • {submission.year} {submission.quarter}
           </p>
         </div>
         <span className={`inline-block px-3 py-1 rounded-full text-xs font-medium ${statusInfo.cls}`}>
@@ -329,7 +329,7 @@ export default function SubmissionDetailPage() {
         <table className="w-full">
           <thead className="bg-surface-50 dark:bg-surface-900/50 border-b border-surface-200 dark:border-surface-700">
             <tr>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-surface-600 uppercase w-16">ÃƒÂ¢Ã¢â‚¬Å¾Ã¢â‚¬â€œ</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-surface-600 uppercase w-16">ÃƒÂ¢Ã¢â‚¬Å¾—œ</th>
               <th className="px-4 py-3 text-left text-xs font-semibold text-surface-600 uppercase">Ko&apos;rsatkich</th>
               <th className="px-4 py-3 text-left text-xs font-semibold text-surface-600 uppercase w-20">Birlik</th>
               <th className="px-4 py-3 text-left text-xs font-semibold text-surface-600 uppercase w-24">Maqsad</th>
@@ -350,7 +350,7 @@ export default function SubmissionDetailPage() {
               const tgtVal = target?.values?.[ind.id];
               const rev = submission.indicator_reviews?.[ind.id];
 
-              let foiz = "ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â";
+              let foiz = "—";
               if (typeof tgtVal === "number" && typeof cell?.value === "number") {
                 if (tgtVal > 0) {
                   const p = (cell.value / tgtVal) * 100;
@@ -378,16 +378,16 @@ export default function SubmissionDetailPage() {
                   <td className={`px-4 py-3 text-sm ${ind.is_sub_indicator ? "pl-8 text-surface-600" : ""}`}>{ind.name}</td>
                   <td className="px-4 py-3 text-sm text-surface-500">{ind.unit}</td>
                   <td className="px-4 py-3 text-sm text-surface-700 dark:text-surface-300">
-                    {tgtVal === null || tgtVal === undefined ? <span className="text-surface-400">ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â</span> : tgtVal}
+                    {tgtVal === null || tgtVal === undefined ? <span className="text-surface-400">—</span> : tgtVal}
                   </td>
                   <td className="px-4 py-3 text-sm font-medium">
-                    {cell?.value === null || cell?.value === undefined ? <span className="text-surface-400">ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â</span> : cell.value}
+                    {cell?.value === null || cell?.value === undefined ? <span className="text-surface-400">—</span> : cell.value}
                   </td>
                   <td className="px-4 py-3 text-sm font-medium text-primary-600 dark:text-primary-400">{foiz}</td>
                   <td className="px-4 py-3">
                     <div className="space-y-1">
                       {(cell?.files ?? []).length === 0 ? (
-                        <span className="text-xs text-surface-400">ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â</span>
+                        <span className="text-xs text-surface-400">—</span>
                       ) : (
                         (cell!.files).map((p) => (
                           <button
@@ -435,7 +435,7 @@ export default function SubmissionDetailPage() {
                         {stage === "science" && rev?.dean && (
                           <div className={`text-xs ${rev.dean.status === "approved" ? "text-green-700 dark:text-green-400" : "text-danger-700 dark:text-danger-400"}`}>
                             Dekan: {rev.dean.status === "approved" ? "tasdiqlangan" : "rad etgan"}
-                            {rev.dean.comment ? ` ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â ${rev.dean.comment}` : ""}
+                            {rev.dean.comment ? ` — ${rev.dean.comment}` : ""}
                           </div>
                         )}
                       </div>
@@ -468,10 +468,10 @@ export default function SubmissionDetailPage() {
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <p className="text-xs text-surface-500">
               {rejectedDraftCount > 0
-                ? `${rejectedDraftCount} ta ko'rsatkich rad etiladi ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â hisobot xodimga qaytariladi.`
+                ? `${rejectedDraftCount} ta ko'rsatkich rad etiladi — hisobot xodimga qaytariladi.`
                 : stage === "dean"
-                  ? "Barcha ko'rsatkichlar tasdiqlanadi ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â hisobot ilmiy bo'limga yuboriladi."
-                  : "Barcha ko'rsatkichlar tasdiqlanadi ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â hisobot yakuniy tasdiqlanadi."}
+                  ? "Barcha ko'rsatkichlar tasdiqlanadi — hisobot ilmiy bo'limga yuboriladi."
+                  : "Barcha ko'rsatkichlar tasdiqlanadi — hisobot yakuniy tasdiqlanadi."}
             </p>
             <Button onClick={finalize} isLoading={submitting}>
               Yakunlash
@@ -520,15 +520,15 @@ function IndicatorStatusPill({
     <div className="space-y-1">
       {review.dean && (
         <div className={review.dean.status === "approved" ? "text-green-700 dark:text-green-400" : "text-danger-700 dark:text-danger-400"}>
-          Dekan: {review.dean.status === "approved" ? "ÃƒÂ¢Ã…â€œÃ¢â‚¬Å“" : "ÃƒÂ¢Ã…â€œÃ¢â‚¬Â¢"}
-          {review.dean.comment ? ` ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â ${review.dean.comment}` : ""}
+          Dekan: {review.dean.status === "approved" ? "✓" : "✗"}
+          {review.dean.comment ? ` — ${review.dean.comment}` : ""}
           <span className="text-surface-400 ml-1">({reviewerMap.get(review.dean.by) ?? ""})</span>
         </div>
       )}
       {review.science && (
         <div className={review.science.status === "approved" ? "text-green-700 dark:text-green-400" : "text-danger-700 dark:text-danger-400"}>
-          Ilmiy b.: {review.science.status === "approved" ? "ÃƒÂ¢Ã…â€œÃ¢â‚¬Å“" : "ÃƒÂ¢Ã…â€œÃ¢â‚¬Â¢"}
-          {review.science.comment ? ` ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â ${review.science.comment}` : ""}
+          Ilmiy b.: {review.science.status === "approved" ? "✓" : "✗"}
+          {review.science.comment ? ` — ${review.science.comment}` : ""}
           <span className="text-surface-400 ml-1">({reviewerMap.get(review.science.by) ?? ""})</span>
         </div>
       )}

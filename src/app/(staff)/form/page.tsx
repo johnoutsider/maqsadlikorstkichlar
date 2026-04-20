@@ -197,7 +197,7 @@ export default function FormPage() {
       if (raw) {
         const n = Number(raw);
         if (Number.isNaN(n)) {
-          setError(`"${ind.no}. ${ind.name}" Ã¢â‚¬â€ son kiriting yoki bo'sh qoldiring.`);
+          setError(`"${ind.no}. ${ind.name}" — son kiriting yoki bo'sh qoldiring.`);
           return null;
         }
         value = n;
@@ -251,13 +251,13 @@ export default function FormPage() {
         universityId: user.university_id,
         facultyId: user.faculty_id,
         title: isRevision ? "Hisobot qayta yuborildi" : "Yangi hisobot yuborildi",
-        message: `${user.display_name} Ã¢â‚¬â€ ${year} ${quarter} chorak hisoboti dekan tasdiqlashi uchun yuborildi.`,
+        message: `${user.display_name} — ${year} ${quarter} chorak hisoboti dekan tasdiqlashi uchun yuborildi.`,
         data: { submission_id: (sub as { id?: string } | null)?.id },
       });
     }
     setMessage(
       newStatus === "pending_dean"
-        ? "Yuborildi Ã¢â‚¬â€ dekan tasdiqlashi kutilmoqda."
+        ? "Yuborildi — dekan tasdiqlashi kutilmoqda."
         : "Qoralama saqlandi."
     );
     load();
@@ -379,7 +379,7 @@ export default function FormPage() {
           <table className="w-full">
             <thead className="bg-surface-50 dark:bg-surface-900/50 border-b border-surface-200 dark:border-surface-700">
               <tr>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-surface-600 uppercase w-16">Ã¢â€žâ€“</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-surface-600 uppercase w-16">№</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-surface-600 uppercase">Ko&apos;rsatkich</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-surface-600 uppercase w-24">Birlik</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-surface-600 uppercase w-24">Maqsad</th>
@@ -394,7 +394,7 @@ export default function FormPage() {
                 const maqsad = target?.values?.[ind.id] ?? null;
                 const parseNum = (v: string) => { const n = Number(v); return isNaN(n) ? 0 : n; };
                 const qiymat = values[ind.id] ? parseNum(values[ind.id]) : null;
-                let foiz = "Ã¢â‚¬â€";
+                let foiz = "—";
                 if (typeof maqsad === "number" && maqsad > 0 && typeof qiymat === "number") {
                    const p = (qiymat / maqsad) * 100;
                    foiz = (p > 100 ? 100 : p).toFixed(1) + "%";
@@ -422,7 +422,7 @@ export default function FormPage() {
                     </td>
                     <td className="px-4 py-3 text-sm text-surface-500">{ind.unit}</td>
                     <td className="px-4 py-3 text-sm font-medium text-surface-700 dark:text-surface-300">
-                      {maqsad !== null ? maqsad : <span className="text-surface-400">Ã¢â‚¬â€</span>}
+                      {maqsad !== null ? maqsad : <span className="text-surface-400">—</span>}
                     </td>
                     <td className="px-4 py-3">
                       <input
@@ -456,7 +456,7 @@ export default function FormPage() {
                                 className="text-danger-600 hover:text-danger-700"
                                 title="O'chirish"
                               >
-                                Ã¢Å“â€¢
+                                ✕
                               </button>
                             )}
                           </div>
