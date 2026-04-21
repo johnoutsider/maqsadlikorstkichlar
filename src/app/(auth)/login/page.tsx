@@ -8,7 +8,7 @@ import { useSupabaseAuth } from "@/contexts/SupabaseAuthContext";
 
 export default function LoginPage() {
   const router = useRouter();
-  const { signIn, signOut, authUser, user, loading } = useSupabaseAuth();
+  const { signIn, signOut, authUser, user, loading, profileLoading } = useSupabaseAuth();
 
   const destinationFor = (role?: string) => {
     if (role === "super_admin") return "/universities";
@@ -16,6 +16,8 @@ export default function LoginPage() {
     if (role === "university_admin") return "/users";
     if (role === "science_department") return "/targets";
     if (role === "vice_rector" || role === "dean") return "/targets";
+    if (role === "supervisor") return "/doktorantura/mening-talabalarim";
+    if (role === "doktorant") return "/doktorantura/mening-profilim";
     return "/overview";
   };
 
@@ -26,14 +28,14 @@ export default function LoginPage() {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    if (loading) return;
+    if (loading || profileLoading) return;
     if (authUser && user) {
       router.push(destinationFor(user.role));
     } else if (authUser && !user) {
       signOut();
       setError("Profilingiz topilmadi. Qaytadan kiring.");
     }
-  }, [authUser, user, loading, router, signOut]);
+  }, [authUser, user, loading, profileLoading, router, signOut]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -51,7 +53,7 @@ export default function LoginPage() {
     }
   };
 
-  if (loading || (authUser && user)) {
+  if (loading || profileLoading || (authUser && user)) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ background: "var(--surface)" }}>
         <div

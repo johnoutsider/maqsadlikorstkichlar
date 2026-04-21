@@ -11,6 +11,7 @@ interface SupabaseAuthContextType {
   session: Session | null;
   authUser: SupabaseUser | null;
   loading: boolean;
+  profileLoading: boolean;
   refresh: () => Promise<void>;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
@@ -21,6 +22,7 @@ const SupabaseAuthContext = createContext<SupabaseAuthContextType>({
   session: null,
   authUser: null,
   loading: true,
+  profileLoading: true,
   refresh: async () => {},
   signIn: async () => ({ error: "not initialized" }),
   signOut: async () => {},
@@ -32,6 +34,7 @@ export function SupabaseAuthProvider({ children }: { children: React.ReactNode }
   const [authUser, setAuthUser] = useState<SupabaseUser | null>(null);
   const [user, setUser] = useState<CurrentUser | null>(null);
   const [loading, setLoading] = useState(true);
+  const [profileLoading, setProfileLoading] = useState(true);
   const router = useRouter();
 
   // Track whether the INITIAL auth state event has been processed.
@@ -39,6 +42,7 @@ export function SupabaseAuthProvider({ children }: { children: React.ReactNode }
   // which is the single source of truth — we use it to set loading=false
   // instead of the manual refresh(), preventing the race condition.
   const initialEventProcessed = useRef(false);
+  const authChangeSeq = useRef(0);
 
   const loadProfile = useCallback(
     async (uid: string): Promise<CurrentUser | null> => {
@@ -55,20 +59,28 @@ export function SupabaseAuthProvider({ children }: { children: React.ReactNode }
   );
 
   const refresh = useCallback(async () => {
+    const requestSeq = ++authChangeSeq.current;
     try {
       const { data: { session: s } } = await supabase.auth.getSession();
       setSession(s);
       setAuthUser(s?.user ?? null);
       if (s?.user) {
-        setUser(await loadProfile(s.user.id));
+        setProfileLoading(true);
+        const nextUser = await loadProfile(s.user.id);
+        if (authChangeSeq.current !== requestSeq) return;
+        setUser(nextUser);
+        setProfileLoading(false);
       } else {
         setUser(null);
+        setProfileLoading(false);
       }
     } catch (e) {
       console.error("[SupabaseAuth] refresh failed:", e);
+      if (authChangeSeq.current !== requestSeq) return;
       setSession(null);
       setAuthUser(null);
       setUser(null);
+      setProfileLoading(false);
     }
   }, [supabase, loadProfile]);
 
@@ -78,22 +90,46 @@ export function SupabaseAuthProvider({ children }: { children: React.ReactNode }
     // the entire auth state and then clear loading. This is the correct
     // pattern per the @supabase/ssr docs and avoids the race condition
     // where a manual getSession() + onAuthStateChange overlap.
-    const { data: sub } = supabase.auth.onAuthStateChange(async (event, s) => {
+    const { data: sub } = supabase.auth.onAuthStateChange((event, s) => {
       setSession(s);
       setAuthUser(s?.user ?? null);
 
-      try {
-        setUser(s?.user ? await loadProfile(s.user.id) : null);
-      } catch (e) {
-        console.error("[SupabaseAuth] loadProfile failed:", e);
+      const requestSeq = ++authChangeSeq.current;
+
+      if (!s?.user) {
         setUser(null);
+        setProfileLoading(false);
+        if (!initialEventProcessed.current) {
+          initialEventProcessed.current = true;
+          setLoading(false);
+        }
+      } else {
+        setProfileLoading(true);
       }
 
-      // Clear loading after the very first event (INITIAL_SESSION).
-      // All subsequent signIn / signOut events are live updates.
-      if (!initialEventProcessed.current) {
-        initialEventProcessed.current = true;
-        setLoading(false);
+      // Do not await inside onAuthStateChange; Supabase can still be holding
+      // its internal auth lock here, and async work can trip navigatorLock
+      // contention in the browser.
+      if (s?.user) {
+        queueMicrotask(async () => {
+          try {
+            const nextUser = await loadProfile(s.user.id);
+            if (authChangeSeq.current !== requestSeq) return;
+            setUser(nextUser);
+          } catch (e) {
+            console.error("[SupabaseAuth] loadProfile failed:", e);
+            if (authChangeSeq.current !== requestSeq) return;
+            setUser(null);
+          } finally {
+            if (authChangeSeq.current === requestSeq) {
+              setProfileLoading(false);
+            }
+            if (!initialEventProcessed.current) {
+              initialEventProcessed.current = true;
+              setLoading(false);
+            }
+          }
+        });
       }
 
       // Force Next.js to invalidate its server-component cache so the
@@ -118,14 +154,16 @@ export function SupabaseAuthProvider({ children }: { children: React.ReactNode }
   );
 
   const signOut = useCallback(async () => {
+    authChangeSeq.current += 1;
     await supabase.auth.signOut();
     setUser(null);
     setSession(null);
     setAuthUser(null);
+    setProfileLoading(false);
   }, [supabase]);
 
   return (
-    <SupabaseAuthContext.Provider value={{ user, session, authUser, loading, refresh, signIn, signOut }}>
+    <SupabaseAuthContext.Provider value={{ user, session, authUser, loading, profileLoading, refresh, signIn, signOut }}>
       {children}
     </SupabaseAuthContext.Provider>
   );

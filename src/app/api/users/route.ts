@@ -18,7 +18,7 @@ const ROLES_REQUIRING_UNIVERSITY: RoleName[] = [
   "vice_rector",
   "science_department",
   "dean",
-  "staff_manager",
+  "staff_manager"
 ];
 
 const ROLES_REQUIRING_FACULTY: RoleName[] = ["dean"];
@@ -57,9 +57,14 @@ export async function POST(req: Request) {
   const callerUniversityId = (caller as any).university_id as string | null;
 
   // 3. Permission check
-  if (callerRole !== "super_admin" && callerRole !== "university_admin") {
-    return bad("Forbidden: only super_admin or university_admin can create users", 403);
+  if (callerRole !== "super_admin" && callerRole !== "university_admin" && callerRole !== "science_department") {
+    return bad("Forbidden: insufficient permissions to manage users", 403);
   }
+  
+  if (callerRole === "science_department") {
+    return bad("science_department foydalanuvchilari doktorant va supervisorlarni doktorantura moduli orqali yaratishi kerak.", 403);
+  }
+
   if (callerRole === "university_admin") {
     if (role === "super_admin") return bad("Forbidden: cannot create super_admin", 403);
     if (!callerUniversityId) return bad("Caller has no university assigned", 403);
@@ -81,6 +86,10 @@ export async function POST(req: Request) {
     body.university_id = null;
     body.faculty_id = null;
     body.department_id = null;
+  }
+
+  if (role === "supervisor" || role === "doktorant") {
+    return bad("Supervisor va doktorant rollari maxsus doktorantura yaratish jarayoni orqali qo'shiladi.", 400);
   }
 
   // 5. Service-role client for the privileged ops
@@ -136,13 +145,13 @@ export async function POST(req: Request) {
       id: created.user.id,
       email,
       display_name,
-      role_id: roleRow.id,
-      university_id: body.university_id ?? null,
-      faculty_id: body.faculty_id ?? null,
-      department_id: body.department_id ?? null,
-      must_change_password: true,
-      created_by: authUser.id,
-    })
+        role_id: roleRow.id,
+        university_id: body.university_id ?? null,
+        faculty_id: body.faculty_id ?? null,
+        department_id: body.department_id ?? null,
+        must_change_password: true,
+        created_by: authUser.id,
+      })
     .select()
     .single();
 
@@ -175,8 +184,25 @@ export async function DELETE(req: Request) {
   const callerRole = (caller as any).roles.name as RoleName;
   const callerUniversityId = (caller as any).university_id as string | null;
 
-  if (callerRole !== "super_admin" && callerRole !== "university_admin") {
+  if (callerRole !== "super_admin" && callerRole !== "university_admin" && callerRole !== "science_department") {
     return bad("Forbidden", 403);
+  }
+
+  // A science_department shouldn't blindly delete other admins. Add a targeted DB check:
+  if (callerRole === "science_department") {
+    const { data: target } = await supabase
+      .from("users")
+      .select("university_id, roles!inner(name)")
+      .eq("id", targetId)
+      .maybeSingle();
+
+    if (!target || target.university_id !== callerUniversityId) {
+      return bad("Forbidden: target user is outside your university", 403);
+    }
+    const targetRole = (target as any).roles.name;
+    if (targetRole !== "doktorant" && targetRole !== "supervisor") {
+       return bad("Forbidden: science_department can only delete doktorants and supervisors", 403);
+    }
   }
 
   const admin = createAdminClient();
