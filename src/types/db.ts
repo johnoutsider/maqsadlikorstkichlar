@@ -47,6 +47,8 @@ export type RoleName =
   | "science_department"
   | "dean"
   | "staff_manager"
+  | "doktorant"
+  | "supervisor"
   | (string & {});
 
 export interface University {
@@ -159,4 +161,69 @@ export interface Notification {
 export interface CurrentUser extends AppUser {
   role: RoleName;
   role_scope: RoleScope;
+}
+
+export interface Supervisor {
+  id: string;
+  auth_user_id: string;
+  university_id: string | null;
+  faculty_id: string | null;
+  department_id: string | null;
+  full_name: string;
+  staff_id: string;
+  academic_title: string;
+  workplace: string | null;
+  is_external: boolean;
+  email: string;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
+export type ThesisStatus = "taklif" | "jarayonda" | "korib_chiqilmoqda" | "himoyalangan" | "yakunlangan";
+
+export interface Doktorant {
+  id: string;
+  auth_user_id: string;
+  university_id: string;
+  faculty_id: string | null;
+  department_id: string | null;
+  supervisor_id: string | null;
+  full_name: string;
+  student_id: string;
+  enrollment_year: number;
+  research_topic: string;
+  thesis_status: ThesisStatus;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
+export type RecommendationStatus = "davom_etsin" | "qayta_korib_chiqsin" | "muddatni_uzaytirsin";
+
+export interface Evaluation {
+  id: string;
+  doktorant_id: string;
+  supervisor_id: string;
+  period_start: string;
+  period_end: string;
+  overall_rating: number;
+  research_progress: string;
+  strengths: string | null;
+  areas_to_improve: string | null;
+  recommendation: RecommendationStatus;
+  comments: string | null;
+  created_at: string;
+}
+
+export interface ProgressReport {
+  id: string;
+  doktorant_id: string;
+  period_start: string;
+  period_end: string;
+  description: string;
+  file_urls: string[];
+  supervisor_feedback: string | null;
+  feedback_at: string | null;
+  created_at: string;
 }
