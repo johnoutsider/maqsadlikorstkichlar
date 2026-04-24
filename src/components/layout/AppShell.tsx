@@ -6,7 +6,52 @@ import { createClient } from "@/lib/supabase/client";
 import { useSupabaseAuth } from "@/contexts/SupabaseAuthContext";
 import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
-import type { RoleName } from "@/types/db";
+import type { RoleName, University } from "@/types/db";
+
+export interface UniversityBrand {
+  name: string;
+  shortCode: string;
+  logoUrl: string;
+  logoPath: string | null;
+}
+
+const DEFAULT_BRAND: UniversityBrand = {
+  name: "Ilmiy Ko'rsatkichlar",
+  shortCode: "IKT",
+  logoUrl: "",
+  logoPath: null,
+};
+
+const brandCache = new Map<string, UniversityBrand>();
+
+function getBrandCacheKey(universityId: string) {
+  return `university-brand:${universityId}`;
+}
+
+function readStoredBrand(universityId: string): UniversityBrand | null {
+  try {
+    const raw = window.localStorage.getItem(getBrandCacheKey(universityId));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<UniversityBrand>;
+    if (!parsed.name || !parsed.shortCode) return null;
+    return {
+      name: parsed.name,
+      shortCode: parsed.shortCode,
+      logoPath: parsed.logoPath ?? null,
+      logoUrl: parsed.logoUrl ?? "",
+    };
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredBrand(universityId: string, brand: UniversityBrand) {
+  try {
+    window.localStorage.setItem(getBrandCacheKey(universityId), JSON.stringify(brand));
+  } catch {
+    // Storage availability should not block app rendering.
+  }
+}
 
 export function AppShell({
   allowed,
@@ -21,6 +66,7 @@ export function AppShell({
   const supabase = createClient();
   const { user, loading } = useSupabaseAuth();
   const [unread, setUnread] = useState(0);
+  const [brand, setBrand] = useState<UniversityBrand>(DEFAULT_BRAND);
 
   useEffect(() => {
     if (loading) return;
@@ -53,6 +99,89 @@ export function AppShell({
     return () => { cancelled = true; clearInterval(t); supabase.removeChannel(ch); };
   }, [supabase, user]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadBrand() {
+      if (!user?.university_id) {
+        setBrand(DEFAULT_BRAND);
+        return;
+      }
+
+      const cached = brandCache.get(user.university_id);
+      if (cached) {
+        setBrand(cached);
+      } else {
+        const stored = readStoredBrand(user.university_id);
+        if (stored) {
+          brandCache.set(user.university_id, stored);
+          setBrand(stored);
+        }
+      }
+
+      const { data } = await supabase
+        .from("universities")
+        .select("id,name,short_code,logo_url,created_at")
+        .eq("id", user.university_id)
+        .single();
+
+      if (cancelled || !data) return;
+
+      const university = data as University;
+      let logoUrl = cached?.logoPath === university.logo_url ? cached.logoUrl : "";
+
+      if (university.logo_url && !logoUrl) {
+        const { data: signedLogo } = await supabase.storage
+          .from("university-logos")
+          .createSignedUrl(university.logo_url, 60 * 60);
+        logoUrl = signedLogo?.signedUrl ?? "";
+      }
+
+      const nextBrand: UniversityBrand = {
+        name: university.name,
+        shortCode: university.short_code,
+        logoPath: university.logo_url,
+        logoUrl,
+      };
+      brandCache.set(user.university_id, nextBrand);
+      writeStoredBrand(user.university_id, nextBrand);
+      setBrand(nextBrand);
+    }
+
+    loadBrand();
+
+    const handleBrandUpdated = (event: Event) => {
+      const detail = (event as CustomEvent<UniversityBrand>).detail;
+      if (!detail || !user?.university_id) return;
+      brandCache.set(user.university_id, detail);
+      writeStoredBrand(user.university_id, detail);
+      setBrand(detail);
+    };
+
+    window.addEventListener("university-brand:updated", handleBrandUpdated);
+
+    const channel = user?.university_id
+      ? supabase
+          .channel(`university-brand:${user.university_id}`)
+          .on(
+            "postgres_changes",
+            { event: "UPDATE", schema: "public", table: "universities", filter: `id=eq.${user.university_id}` },
+            loadBrand
+          )
+          .subscribe()
+      : null;
+
+    return () => {
+      cancelled = true;
+      window.removeEventListener("university-brand:updated", handleBrandUpdated);
+      if (channel) supabase.removeChannel(channel);
+    };
+  }, [supabase, user?.university_id]);
+
+  useEffect(() => {
+    document.title = `${brand.name} - KPI Tizimi`;
+  }, [brand.name]);
+
   if (loading || !user || !allowed.includes(user.role)) {
     return (
       <div
@@ -79,9 +208,9 @@ export function AppShell({
 
   return (
     <div className="min-h-screen" style={{ background: "var(--surface)" }}>
-      <Sidebar unreadCount={unread} />
+      <Sidebar unreadCount={unread} brand={brand} />
       <div className="lg:pl-64 flex flex-col min-h-screen">
-        <Topbar />
+        <Topbar brand={brand} />
         <main className="flex-1 max-w-[1400px] w-full mx-auto px-4 sm:px-6 lg:px-8 py-7 sm:py-9">
           {children}
         </main>

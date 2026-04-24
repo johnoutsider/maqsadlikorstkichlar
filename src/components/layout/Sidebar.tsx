@@ -4,12 +4,13 @@ import React, { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSupabaseAuth } from "@/contexts/SupabaseAuthContext";
+import type { UniversityBrand } from "./AppShell";
 import type { RoleName } from "@/types/db";
 
 interface NavItem {
   href?: string;
   label: string;
-  icon: React.ReactNode;
+  icon?: React.ReactNode;
   roles: RoleName[];
   children?: NavItem[];
 }
@@ -27,10 +28,21 @@ const NAV: NavItem[] = [
     roles: ["super_admin", "university_admin", "vice_rector", "science_department", "dean", "staff_manager"],
     children: [
       {
-        href: "/overview",
         label: "Statistika",
         icon: <Icon d="M3 3v18h18M7 16l4-4 4 4 4-6" />,
-        roles: ["super_admin", "university_admin", "vice_rector", "science_department", "dean", "staff_manager"],
+        roles: ["university_admin", "vice_rector", "science_department", "dean"],
+        children: [
+          {
+            href: "/overview",
+            label: "Asosiy",
+            roles: ["university_admin", "vice_rector", "science_department", "dean"],
+          },
+          {
+            href: "/monitoring",
+            label: "Monitoring",
+            roles: ["university_admin", "vice_rector", "science_department", "dean"],
+          },
+        ],
       },
       {
         href: "/indicators",
@@ -145,6 +157,12 @@ const NAV: NavItem[] = [
     roles: ["university_admin"],
   },
   {
+    href: "/university-settings",
+    label: "Universitet Sozlamalari",
+    icon: <Icon d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065zM15 12a3 3 0 11-6 0 3 3 0 016 0z" />,
+    roles: ["university_admin"],
+  },
+  {
     href: "/notifications",
     label: "Bildirishnomalar",
     icon: <Icon d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6 6 0 10-12 0v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />,
@@ -152,25 +170,113 @@ const NAV: NavItem[] = [
   },
 ];
 
-export function Sidebar({ unreadCount = 0 }: { unreadCount?: number }) {
+export function Sidebar({ unreadCount = 0, brand }: { unreadCount?: number; brand: UniversityBrand }) {
   const pathname = usePathname();
   const { user } = useSupabaseAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({ "KPI Moduli": true });
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({ "KPI Moduli": true, "Statistika": true });
 
   if (!user) return null;
-  const items = NAV.map(n => {
-    if (n.children) {
-      return {
-        ...n,
-        children: n.children.filter(c => c.roles.includes(user.role))
-      };
+
+  const filterItems = (items: NavItem[]): NavItem[] => {
+    return items
+      .filter((item) => item.roles.includes(user.role))
+      .map((item) => ({
+        ...item,
+        children: item.children ? filterItems(item.children) : undefined,
+      }))
+      .filter((item) => !item.children || item.children.length > 0);
+  };
+
+  const items = filterItems(NAV);
+
+  const isItemActive = (item: NavItem): boolean => {
+    if (item.href && (pathname === item.href || pathname.startsWith(item.href + "/"))) return true;
+    return item.children?.some(isItemActive) ?? false;
+  };
+
+  const renderItem = (item: NavItem, depth: number): React.ReactNode => {
+    if (item.children && depth < 2) {
+      const isOpen = openGroups[item.label];
+      const active = isItemActive(item);
+      const topLevel = depth === 0;
+      return (
+        <div key={item.label} className="space-y-0.5">
+          <button
+            onClick={() => setOpenGroups(p => ({ ...p, [item.label]: !p[item.label] }))}
+            className={`w-full flex items-center justify-between rounded-lg text-sm transition-all group hover:bg-surface-100 dark:hover:bg-surface-800 ${topLevel ? "px-3 py-2.5" : "pl-3 pr-3 py-2"}`}
+            style={{
+              background: active && !topLevel ? "var(--sidebar-active-bg)" : "transparent",
+              color: active && !topLevel ? "var(--sidebar-active-text)" : "var(--sidebar-text)",
+            }}
+          >
+            <span className={topLevel ? "flex items-center gap-3" : "flex items-center gap-2"}>
+              {topLevel && item.icon && (
+                <span className="shrink-0 transition-opacity" style={{ opacity: active ? 1 : 0.6 }}>
+                  {item.icon}
+                </span>
+              )}
+              <span className="font-medium" style={{ fontSize: topLevel ? "0.8125rem" : "0.75rem" }}>{item.label}</span>
+            </span>
+            <svg className={`${topLevel ? "w-4 h-4" : "w-3.5 h-3.5"} transition-transform ${isOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+          {isOpen && (
+            <div className={`${topLevel ? "pl-6" : "pl-3"} space-y-0.5`}>
+              {item.children.map(child => renderItem(child, depth + 1))}
+            </div>
+          )}
+        </div>
+      );
     }
-    return n;
-  }).filter((n) => {
-    if (n.children) return n.children.length > 0;
-    return n.roles.includes(user.role);
-  });
+
+    const active = isItemActive(item);
+    const isNotif = item.href === "/notifications";
+    const itemKey = item.href || item.label;
+    const linkIndent = depth >= 2 ? "pl-6 pr-3 py-2" : "px-3 py-2.5";
+    return (
+      <Link
+        key={itemKey}
+        href={item.href!}
+        onClick={() => setMobileOpen(false)}
+        className={`flex items-center justify-between rounded-lg text-sm transition-all group ${linkIndent}`}
+        style={{
+          background: active ? "var(--sidebar-active-bg)" : "transparent",
+          color: active ? "var(--sidebar-active-text)" : "var(--sidebar-text)",
+        }}
+        onMouseEnter={(e) => {
+          if (!active) (e.currentTarget as HTMLElement).style.background = "var(--sidebar-hover-bg)";
+        }}
+        onMouseLeave={(e) => {
+          if (!active) (e.currentTarget as HTMLElement).style.background = "transparent";
+        }}
+      >
+        <span className="flex items-center gap-3">
+          {depth === 0 && item.icon && (
+            <span
+              className="shrink-0 transition-opacity"
+              style={{ opacity: active ? 1 : 0.6 }}
+            >
+              {item.icon}
+            </span>
+          )}
+          <span className="font-medium" style={{ fontSize: depth >= 2 ? "0.75rem" : "0.8125rem" }}>{item.label}</span>
+        </span>
+        {isNotif && unreadCount > 0 && (
+          <span
+            className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold rounded-full shrink-0"
+            style={{
+              background: active ? "rgba(255,255,255,0.25)" : "#ba1a1a",
+              color: "#ffffff",
+            }}
+          >
+            {unreadCount > 99 ? "99+" : unreadCount}
+          </span>
+        )}
+      </Link>
+    );
+  };
 
   const SidebarContent = () => (
     <div className="flex flex-col h-full" style={{ background: "var(--sidebar-bg)" }}>
@@ -181,12 +287,18 @@ export function Sidebar({ unreadCount = 0 }: { unreadCount?: number }) {
             className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
             style={{ background: "rgba(255,255,255,0.12)" }}
           >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-              <path d="M3 21h18M9 21V7l4-4 4 4v14M9 12h6" />
-            </svg>
+            {brand.logoUrl ? (
+              <img src={brand.logoUrl} alt="Universitet logotipi" className="h-8 w-8 rounded-lg object-cover" />
+            ) : (
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 21h18M9 21V7l4-4 4 4v14M9 12h6" />
+              </svg>
+            )}
           </div>
-          <div>
-            <p className="text-white font-display font-semibold text-sm leading-tight">Ilmiy Ko&apos;rsatkichlar</p>
+          <div className="min-w-0">
+            <p className="truncate text-white font-display font-semibold text-sm leading-tight">
+              {brand.name}
+            </p>
             <p style={{ color: "rgba(255,255,255,0.45)", fontSize: "0.625rem", letterSpacing: "0.08em" }} className="uppercase font-medium">
               KPI Tizimi
             </p>
@@ -196,101 +308,7 @@ export function Sidebar({ unreadCount = 0 }: { unreadCount?: number }) {
 
       {/* Nav Items */}
       <nav className="flex-1 overflow-y-auto px-3 py-3 space-y-0.5">
-        {items.map((item) => {
-          if (item.children) {
-            const isOpen = openGroups[item.label];
-            return (
-              <div key={item.label} className="space-y-0.5">
-                <button
-                  onClick={() => setOpenGroups(p => ({ ...p, [item.label]: !p[item.label] }))}
-                  className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm transition-all group hover:bg-surface-100 dark:hover:bg-surface-800"
-                  style={{ color: "var(--sidebar-text)" }}
-                >
-                  <span className="flex items-center gap-3">
-                    <span className="shrink-0 transition-opacity" style={{ opacity: 0.6 }}>
-                      {item.icon}
-                    </span>
-                    <span className="font-medium" style={{ fontSize: "0.8125rem" }}>{item.label}</span>
-                  </span>
-                  <svg className={`w-4 h-4 transition-transform ${isOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                </button>
-                {isOpen && (
-                  <div className="pl-6 space-y-0.5">
-                    {item.children.map(child => {
-                      const active = pathname === child.href || (child.href && pathname.startsWith(child.href + "/"));
-                      return (
-                        <Link
-                          key={child.href}
-                          href={child.href!}
-                          onClick={() => setMobileOpen(false)}
-                          className="flex items-center justify-between px-3 py-2.5 rounded-lg text-sm transition-all group"
-                          style={{
-                            background: active ? "var(--sidebar-active-bg)" : "transparent",
-                            color: active ? "var(--sidebar-active-text)" : "var(--sidebar-text)",
-                          }}
-                          onMouseEnter={(e) => {
-                            if (!active) (e.currentTarget as HTMLElement).style.background = "var(--sidebar-hover-bg)";
-                          }}
-                          onMouseLeave={(e) => {
-                            if (!active) (e.currentTarget as HTMLElement).style.background = "transparent";
-                          }}
-                        >
-                          <span className="flex items-center gap-3">
-                            <span className="font-medium" style={{ fontSize: "0.8125rem" }}>{child.label}</span>
-                          </span>
-                        </Link>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            );
-          }
-
-          const active = pathname === item.href || (item.href && pathname.startsWith(item.href + "/"));
-          const isNotif = item.href === "/notifications";
-          return (
-            <Link
-              key={item.href || item.label}
-              href={item.href!}
-              onClick={() => setMobileOpen(false)}
-              className="flex items-center justify-between px-3 py-2.5 rounded-lg text-sm transition-all group"
-              style={{
-                background: active ? "var(--sidebar-active-bg)" : "transparent",
-                color: active ? "var(--sidebar-active-text)" : "var(--sidebar-text)",
-              }}
-              onMouseEnter={(e) => {
-                if (!active) (e.currentTarget as HTMLElement).style.background = "var(--sidebar-hover-bg)";
-              }}
-              onMouseLeave={(e) => {
-                if (!active) (e.currentTarget as HTMLElement).style.background = "transparent";
-              }}
-            >
-              <span className="flex items-center gap-3">
-                <span
-                  className="shrink-0 transition-opacity"
-                  style={{ opacity: active ? 1 : 0.6 }}
-                >
-                  {item.icon}
-                </span>
-                <span className="font-medium" style={{ fontSize: "0.8125rem" }}>{item.label}</span>
-              </span>
-              {isNotif && unreadCount > 0 && (
-                <span
-                  className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold rounded-full shrink-0"
-                  style={{
-                    background: active ? "rgba(255,255,255,0.25)" : "#ba1a1a",
-                    color: "#ffffff",
-                  }}
-                >
-                  {unreadCount > 99 ? "99+" : unreadCount}
-                </span>
-              )}
-            </Link>
-          );
-        })}
+        {items.map((item) => renderItem(item, 0))}
       </nav>
 
       {/* Footer: email */}
@@ -321,7 +339,7 @@ export function Sidebar({ unreadCount = 0 }: { unreadCount?: number }) {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
           </svg>
         </button>
-        <span className="text-white font-display font-semibold text-sm">IKT</span>
+        <span className="max-w-[12rem] truncate text-white font-display font-semibold text-sm">{brand.shortCode || "IKT"}</span>
         <span className="w-9" />
       </div>
 

@@ -55,6 +55,7 @@ export interface University {
   id: string;
   name: string;
   short_code: string;
+  logo_url: string | null;
   created_at: string;
 }
 

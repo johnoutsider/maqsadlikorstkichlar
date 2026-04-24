@@ -4,6 +4,7 @@ import React, { useState, useRef, useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { useSupabaseAuth } from "@/contexts/SupabaseAuthContext";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
+import type { UniversityBrand } from "./AppShell";
 
 const ROLE_LABEL: Record<string, string> = {
   super_admin: "Super Admin",
@@ -16,6 +17,7 @@ const ROLE_LABEL: Record<string, string> = {
 
 const BREADCRUMB_LABELS: Record<string, string> = {
   overview: "Statistika",
+  monitoring: "Monitoring",
   universities: "Universitetlar",
   users: "Foydalanuvchilar",
   faculties: "Fakultetlar",
@@ -28,7 +30,7 @@ const BREADCRUMB_LABELS: Record<string, string> = {
   notifications: "Bildirishnomalar",
 };
 
-export function Topbar() {
+export function Topbar({ brand }: { brand: UniversityBrand }) {
   const { user, signOut } = useSupabaseAuth();
   const router = useRouter();
   const pathname = usePathname();
@@ -97,7 +99,7 @@ export function Topbar() {
           className="font-display font-semibold text-sm"
           style={{ color: "var(--on-surface)" }}
         >
-          IKT
+          {brand.shortCode || "IKT"}
         </span>
       </div>
 
