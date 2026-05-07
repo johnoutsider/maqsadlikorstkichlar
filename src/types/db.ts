@@ -217,6 +217,37 @@ export interface Evaluation {
   created_at: string;
 }
 
+export type IlmiyDaraja = 'fan_doktori' | 'fan_nomzodi' | 'phd' | 'yoq';
+export type IlmiyUnvon  = 'professor' | 'dotsent' | 'katta_oqituvchi' | 'oqituvchi' | 'assistent';
+export type Stavka      = '0.25' | '0.5' | '0.75' | '1.0' | '1.25' | '1.5';
+export type IshTuri     = 'asosiy' | 'orindosh';
+export type FaoliyatHolati = 'faol' | 'ishdan_ketgan' | 'tatilda';
+
+export interface Teacher {
+  id: string;
+  university_id: string;
+  faculty_id: string;
+  department_id: string;
+  last_name: string;
+  first_name: string;
+  middle_name: string | null;
+  birth_date: string | null;
+  gender: 'erkak' | 'ayol' | null;
+  phone: string | null;
+  email: string | null;
+  passport_pinfl: string | null;
+  ilmiy_daraja: IlmiyDaraja | null;
+  ilmiy_unvon: IlmiyUnvon | null;
+  lavozim: string | null;
+  stavka: Stavka | null;
+  ish_turi: IshTuri | null;
+  ishga_kirgan_sana: string | null;
+  faoliyat_holati: FaoliyatHolati;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface ProgressReport {
   id: string;
   doktorant_id: string;
