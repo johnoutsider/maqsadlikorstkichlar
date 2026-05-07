@@ -34,6 +34,7 @@ export default function TeachersPage() {
   const router = useRouter();
 
   const canEdit = user?.role === "staff_manager";
+  const isDean  = user?.role === "dean";
 
   const [rows, setRows] = useState<TeacherRow[]>([]);
   const [faculties, setFaculties] = useState<Faculty[]>([]);
@@ -41,9 +42,11 @@ export default function TeachersPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  // Filters
+  // Filters — deans are locked to their own faculty
   const [search, setSearch] = useState("");
-  const [filterFaculty, setFilterFaculty] = useState("");
+  const [filterFaculty, setFilterFaculty] = useState(
+    () => (user?.role === "dean" ? (user.faculty_id ?? "") : "")
+  );
   const [filterDept, setFilterDept] = useState("");
   const [filterDaraja, setFilterDaraja] = useState("");
   const [filterUnvon, setFilterUnvon] = useState("");
@@ -69,10 +72,11 @@ export default function TeachersPage() {
     const facMap = new Map(facs.map((f) => [f.id, f.name]));
     const deptMap = new Map(deps.map((d) => [d.id, d.name]));
 
-    const { data, error: dbErr } = await supabase
-      .from("teachers")
-      .select("*")
-      .order("last_name");
+    let query = supabase.from("teachers").select("*").order("last_name");
+    if (user.role === "dean" && user.faculty_id) {
+      query = query.eq("faculty_id", user.faculty_id);
+    }
+    const { data, error: dbErr } = await query;
 
     if (dbErr) { setError(dbErr.message); setLoading(false); return; }
 
@@ -85,6 +89,11 @@ export default function TeachersPage() {
     );
     setLoading(false);
   }, [supabase, user]);
+
+  // Lock faculty filter to dean's own faculty once user is resolved
+  useEffect(() => {
+    if (isDean && user?.faculty_id) setFilterFaculty(user.faculty_id);
+  }, [isDean, user?.faculty_id]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -202,11 +211,15 @@ export default function TeachersPage() {
           <>
             <select
               value={filterFaculty}
-              onChange={(e) => { setFilterFaculty(e.target.value); setFilterDept(""); }}
+              onChange={(e) => { if (!isDean) { setFilterFaculty(e.target.value); setFilterDept(""); } }}
+              disabled={isDean}
               className={selCls}
             >
-              <option value="">Barcha fakultetlar</option>
-              {faculties.map((f) => (
+              {!isDean && <option value="">Barcha fakultetlar</option>}
+              {(isDean
+                ? faculties.filter((f) => f.id === filterFaculty)
+                : faculties
+              ).map((f) => (
                 <option key={f.id} value={f.id}>{f.name}</option>
               ))}
             </select>
