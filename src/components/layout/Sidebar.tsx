@@ -29,17 +29,19 @@ const NAV: NavItem[] = [
     children: [
       {
         label: "Statistika",
-        icon: <Icon d="M3 3v18h18M7 16l4-4 4 4 4-6" />,
+        icon: <Icon d="M3 3v18h18M7 16l4-4 4 4 4-6" size={14} />,
         roles: ["university_admin", "vice_rector", "science_department", "dean"],
         children: [
           {
             href: "/overview",
             label: "Asosiy",
+            icon: <Icon d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" size={14} />,
             roles: ["university_admin", "vice_rector", "science_department", "dean"],
           },
           {
             href: "/monitoring",
             label: "Monitoring",
+            icon: <Icon d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" size={14} />,
             roles: ["university_admin", "vice_rector", "science_department", "dean"],
           },
         ],
@@ -47,31 +49,37 @@ const NAV: NavItem[] = [
       {
         href: "/indicators",
         label: "Ko'rsatkichlar",
-        icon: <Icon d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />,
+        icon: <Icon d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" size={14} />,
         roles: ["university_admin", "science_department"],
       },
       {
         href: "/targets",
         label: "Maqsadlar",
-        icon: <Icon d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 14l-4-4 1.41-1.41L12 13.17l6.59-6.58L20 8l-8 8z" />,
+        icon: <Icon d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 14l-4-4 1.41-1.41L12 13.17l6.59-6.58L20 8l-8 8z" size={14} />,
         roles: ["university_admin", "science_department", "vice_rector", "dean"],
       },
       {
         href: "/submissions",
         label: "Hisobotlar",
-        icon: <Icon d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />,
+        icon: <Icon d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" size={14} />,
         roles: ["university_admin", "science_department", "vice_rector", "dean"],
+      },
+      {
+        href: "/teachers",
+        label: "O'qituvchilar ro'yxati",
+        icon: <Icon d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8m13 2v2m0-4v2m-2-2h4" size={14} />,
+        roles: ["staff_manager", "dean", "science_department", "university_admin", "vice_rector"],
       },
       {
         href: "/form",
         label: "Hisobot formasi",
-        icon: <Icon d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />,
+        icon: <Icon d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" size={14} />,
         roles: ["staff_manager"],
       },
       {
         href: "/my-submissions",
         label: "Mening hisobotlarim",
-        icon: <Icon d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />,
+        icon: <Icon d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" size={14} />,
         roles: ["staff_manager"],
       },
     ]
@@ -84,50 +92,49 @@ const NAV: NavItem[] = [
       {
         href: "/doktorantura",
         label: "Doktorantlar",
-        icon: <Icon d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8zm8 2a3 3 0 016 0v1" />,
+        icon: <Icon d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8zm8 2a3 3 0 016 0v1" size={14} />,
         roles: ["science_department"],
       },
       {
         href: "/doktorantura/supervisors",
         label: "Ilmiy Rahbarlar",
-        icon: <Icon d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />,
+        icon: <Icon d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" size={14} />,
         roles: ["science_department"],
       },
-     
       {
         href: "/doktorantura/mening-talabalarim",
         label: "Mening Talabalarim",
-        icon: <Icon d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8zm8 2a3 3 0 016 0v1" />,
+        icon: <Icon d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8zm8 2a3 3 0 016 0v1" size={14} />,
         roles: ["supervisor"],
       },
       {
         href: "/doktorantura/baholash",
         label: "Baholash",
-        icon: <Icon d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />,
+        icon: <Icon d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" size={14} />,
         roles: ["supervisor"],
       },
       {
         href: "/doktorantura/holat-yangilash",
         label: "Holat Yangilash",
-        icon: <Icon d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />,
+        icon: <Icon d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" size={14} />,
         roles: ["supervisor"],
       },
       {
         href: "/doktorantura/mening-profilim",
         label: "Mening Profilim",
-        icon: <Icon d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />,
+        icon: <Icon d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" size={14} />,
         roles: ["doktorant"],
       },
       {
         href: "/doktorantura/hisobot-yuborish",
         label: "Hisobot Yuborish",
-        icon: <Icon d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />,
+        icon: <Icon d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" size={14} />,
         roles: ["doktorant"],
       },
       {
         href: "/doktorantura/rahbar-fikri",
         label: "Rahbar Fikri",
-        icon: <Icon d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />,
+        icon: <Icon d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" size={14} />,
         roles: ["doktorant"],
       },
     ]
@@ -211,7 +218,7 @@ export function Sidebar({ unreadCount = 0, brand }: { unreadCount?: number; bran
             }}
           >
             <span className={topLevel ? "flex items-center gap-3" : "flex items-center gap-2"}>
-              {topLevel && item.icon && (
+              {item.icon && (
                 <span className="shrink-0 transition-opacity" style={{ opacity: active ? 1 : 0.6 }}>
                   {item.icon}
                 </span>
@@ -252,8 +259,8 @@ export function Sidebar({ unreadCount = 0, brand }: { unreadCount?: number; bran
           if (!active) (e.currentTarget as HTMLElement).style.background = "transparent";
         }}
       >
-        <span className="flex items-center gap-3">
-          {depth === 0 && item.icon && (
+        <span className={`flex items-center ${depth >= 1 ? "gap-2" : "gap-3"}`}>
+          {item.icon && (
             <span
               className="shrink-0 transition-opacity"
               style={{ opacity: active ? 1 : 0.6 }}
