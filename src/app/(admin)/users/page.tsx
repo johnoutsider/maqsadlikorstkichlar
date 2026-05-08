@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useCallback, useMemo } from "react";
+import React, { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { useSupabaseAuth } from "@/contexts/SupabaseAuthContext";
@@ -55,6 +55,14 @@ export default function UsersPage() {
   const [departmentId, setDepartmentId] = useState("");
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
+
+  // Bulk import state
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [bulkUploading, setBulkUploading] = useState(false);
+  const [bulkResultOpen, setBulkResultOpen] = useState(false);
+  type BulkRow = { row: number; display_name: string; email: string; status: "success" | "error"; error?: string };
+  const [bulkResults, setBulkResults] = useState<BulkRow[]>([]);
+  const [bulkSummary, setBulkSummary] = useState({ succeeded: 0, failed: 0 });
 
   const load = useCallback(async () => {
     if (!user?.university_id) return;
@@ -174,6 +182,30 @@ export default function UsersPage() {
     load();
   };
 
+  const handleBulkUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = "";
+
+    setBulkUploading(true);
+    const fd = new FormData();
+    fd.append("file", file);
+
+    const res = await fetch("/api/users/bulk", { method: "POST", body: fd });
+    setBulkUploading(false);
+
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      alert(data?.error ?? `HTTP ${res.status}`);
+      return;
+    }
+
+    setBulkResults(data.results ?? []);
+    setBulkSummary({ succeeded: data.succeeded ?? 0, failed: data.failed ?? 0 });
+    setBulkResultOpen(true);
+    load();
+  };
+
   return (
     <div>
       <div className="mb-6 flex items-center justify-between">
@@ -193,7 +225,27 @@ export default function UsersPage() {
             </Link>
           </div>
         ) : (
-          <Button onClick={openCreate}>+ Yangi foydalanuvchi</Button>
+          <div className="flex items-center gap-2">
+            <a href="/users-template.xlsx" download>
+              <Button variant="outline" size="sm">Shablon yuklab olish</Button>
+            </a>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".xlsx,.xls"
+              className="hidden"
+              onChange={handleBulkUpload}
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              isLoading={bulkUploading}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              Excel yuklash
+            </Button>
+            <Button onClick={openCreate}>+ Yangi foydalanuvchi</Button>
+          </div>
         )}
       </div>
 
@@ -243,6 +295,52 @@ export default function UsersPage() {
           </table>
         )}
       </div>
+
+      <Modal isOpen={bulkResultOpen} onClose={() => setBulkResultOpen(false)} title="Excel import natijalari">
+        <div className="space-y-4">
+          <div className="flex gap-4">
+            <span className="rounded-full bg-success-100 px-3 py-1 text-sm font-medium text-success-700 dark:bg-success-900/30 dark:text-success-400">
+              ✓ {bulkSummary.succeeded} ta muvaffaqiyatli
+            </span>
+            {bulkSummary.failed > 0 && (
+              <span className="rounded-full bg-danger-100 px-3 py-1 text-sm font-medium text-danger-700 dark:bg-danger-900/30 dark:text-danger-400">
+                ✗ {bulkSummary.failed} ta xato
+              </span>
+            )}
+          </div>
+          <div className="max-h-96 overflow-y-auto rounded-lg border border-surface-200 dark:border-surface-700">
+            <table className="w-full text-sm">
+              <thead className="sticky top-0 border-b border-surface-200 bg-surface-50 dark:border-surface-700 dark:bg-surface-900">
+                <tr>
+                  <th className="px-3 py-2 text-left text-xs font-semibold uppercase text-surface-600">#</th>
+                  <th className="px-3 py-2 text-left text-xs font-semibold uppercase text-surface-600">Ism</th>
+                  <th className="px-3 py-2 text-left text-xs font-semibold uppercase text-surface-600">Email</th>
+                  <th className="px-3 py-2 text-left text-xs font-semibold uppercase text-surface-600">Holat</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-surface-200 dark:divide-surface-700">
+                {bulkResults.map((r) => (
+                  <tr key={r.row} className={r.status === "error" ? "bg-danger-50 dark:bg-danger-900/10" : ""}>
+                    <td className="px-3 py-2 text-surface-500">{r.row}</td>
+                    <td className="px-3 py-2">{r.display_name || "—"}</td>
+                    <td className="px-3 py-2 font-mono text-surface-700 dark:text-surface-300">{r.email || "—"}</td>
+                    <td className="px-3 py-2">
+                      {r.status === "success" ? (
+                        <span className="text-success-600 dark:text-success-400">✓ Qo&apos;shildi</span>
+                      ) : (
+                        <span className="text-danger-600 dark:text-danger-400">✗ {r.error}</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="flex justify-end">
+            <Button onClick={() => setBulkResultOpen(false)}>Yopish</Button>
+          </div>
+        </div>
+      </Modal>
 
       <Modal isOpen={modalOpen} onClose={() => setModalOpen(false)} title="Yangi foydalanuvchi">
         <form onSubmit={save} className="space-y-4">
