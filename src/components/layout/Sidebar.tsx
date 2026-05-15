@@ -21,68 +21,85 @@ const Icon = ({ d, size = 16 }: { d: string; size?: number }) => (
   </svg>
 );
 
+// Small circle bullet used for sub-items
+const Dot = ({ active }: { active: boolean }) => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" style={{ opacity: active ? 1 : 0.45, flexShrink: 0 }}>
+    <circle cx="12" cy="12" r="5" />
+  </svg>
+);
+
+// Chevron-left for collapsed, chevron-down for expanded
+const Chevron = ({ open, size = 14 }: { open: boolean; size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, opacity: 0.6 }}>
+    {open
+      ? <path d="M19 9l-7 7-7-7" />       /* chevron-down  v */
+      : <path d="M15 18l-6-6 6-6" />}     {/* chevron-left  < */}
+  </svg>
+);
+
 const NAV: NavItem[] = [
   {
-    label: "KPI Moduli",
-    icon: <Icon d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />,
-    roles: ["super_admin", "university_admin", "vice_rector", "science_department", "dean", "staff_manager"],
+    label: "Statistika",
+    icon: <Icon d="M3 3v18h18M7 16l4-4 4 4 4-6" />,
+    roles: ["university_admin", "vice_rector", "science_department", "dean"],
     children: [
       {
-        label: "Statistika",
-        icon: <Icon d="M3 3v18h18M7 16l4-4 4 4 4-6" size={14} />,
+        href: "/overview",
+        label: "Asosiy",
         roles: ["university_admin", "vice_rector", "science_department", "dean"],
-        children: [
-          {
-            href: "/overview",
-            label: "Asosiy",
-            icon: <Icon d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" size={14} />,
-            roles: ["university_admin", "vice_rector", "science_department", "dean"],
-          },
-          {
-            href: "/monitoring",
-            label: "Monitoring",
-            icon: <Icon d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" size={14} />,
-            roles: ["university_admin", "vice_rector", "science_department", "dean"],
-          },
-        ],
       },
       {
-        href: "/indicators",
-        label: "Ko'rsatkichlar",
-        icon: <Icon d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" size={14} />,
-        roles: ["university_admin", "science_department"],
+        href: "/monitoring",
+        label: "Monitoring",
+        roles: ["university_admin", "vice_rector", "science_department", "dean"],
       },
       {
-        href: "/targets",
-        label: "Maqsadlar",
-        icon: <Icon d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 14l-4-4 1.41-1.41L12 13.17l6.59-6.58L20 8l-8 8z" size={14} />,
-        roles: ["university_admin", "science_department", "vice_rector", "dean"],
+        href: "/statistics/employees",
+        label: "Hodimlar (HEMIS)",
+        roles: ["university_admin", "vice_rector", "science_department", "dean"],
       },
       {
-        href: "/submissions",
-        label: "Hisobotlar",
-        icon: <Icon d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" size={14} />,
-        roles: ["university_admin", "science_department", "vice_rector", "dean"],
+        href: "/statistics/structure",
+        label: "Tuzilma (HEMIS)",
+        roles: ["university_admin", "vice_rector", "science_department", "dean"],
       },
-      {
-        href: "/teachers",
-        label: "O'qituvchilar ro'yxati",
-        icon: <Icon d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8m13 2v2m0-4v2m-2-2h4" size={14} />,
-        roles: ["staff_manager", "dean", "science_department", "university_admin", "vice_rector"],
-      },
-      {
-        href: "/form",
-        label: "Hisobot formasi",
-        icon: <Icon d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" size={14} />,
-        roles: ["staff_manager"],
-      },
-      {
-        href: "/my-submissions",
-        label: "Mening hisobotlarim",
-        icon: <Icon d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" size={14} />,
-        roles: ["staff_manager"],
-      },
-    ]
+    ],
+  },
+  {
+    href: "/indicators",
+    label: "Ko'rsatkichlar",
+    icon: <Icon d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />,
+    roles: ["university_admin", "science_department"],
+  },
+  {
+    href: "/targets",
+    label: "Maqsadlar",
+    icon: <Icon d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />,
+    roles: ["university_admin", "science_department", "vice_rector", "dean"],
+  },
+  {
+    href: "/submissions",
+    label: "Hisobotlar",
+    icon: <Icon d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />,
+    roles: ["university_admin", "science_department", "vice_rector", "dean"],
+  },
+  {
+    href: "/teachers",
+    label: "O'qituvchilar ro'yxati",
+    icon: <Icon d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8m13 2v2m0-4v2m-2-2h4" />,
+    roles: ["staff_manager", "dean", "science_department", "university_admin", "vice_rector"],
+  },
+  {
+    href: "/form",
+    label: "Hisobot formasi",
+    icon: <Icon d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />,
+    roles: ["staff_manager"],
+  },
+  {
+    href: "/my-submissions",
+    label: "Mening hisobotlarim",
+    icon: <Icon d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />,
+    roles: ["staff_manager"],
   },
   {
     label: "Doktorantura",
@@ -92,49 +109,41 @@ const NAV: NavItem[] = [
       {
         href: "/doktorantura",
         label: "Doktorantlar",
-        icon: <Icon d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8zm8 2a3 3 0 016 0v1" size={14} />,
         roles: ["science_department"],
       },
       {
         href: "/doktorantura/supervisors",
         label: "Ilmiy Rahbarlar",
-        icon: <Icon d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" size={14} />,
         roles: ["science_department"],
       },
       {
         href: "/doktorantura/mening-talabalarim",
         label: "Mening Talabalarim",
-        icon: <Icon d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8zm8 2a3 3 0 016 0v1" size={14} />,
         roles: ["supervisor"],
       },
       {
         href: "/doktorantura/baholash",
         label: "Baholash",
-        icon: <Icon d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" size={14} />,
         roles: ["supervisor"],
       },
       {
         href: "/doktorantura/holat-yangilash",
         label: "Holat Yangilash",
-        icon: <Icon d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" size={14} />,
         roles: ["supervisor"],
       },
       {
         href: "/doktorantura/mening-profilim",
         label: "Mening Profilim",
-        icon: <Icon d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" size={14} />,
         roles: ["doktorant"],
       },
       {
         href: "/doktorantura/hisobot-yuborish",
         label: "Hisobot Yuborish",
-        icon: <Icon d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" size={14} />,
         roles: ["doktorant"],
       },
       {
         href: "/doktorantura/rahbar-fikri",
         label: "Rahbar Fikri",
-        icon: <Icon d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" size={14} />,
         roles: ["doktorant"],
       },
     ]
@@ -177,11 +186,31 @@ const NAV: NavItem[] = [
   },
 ];
 
+// Compute which groups should be open for the current pathname
+function findInitialOpen(navItems: NavItem[], pathname: string): Record<string, boolean> {
+  const result: Record<string, boolean> = {};
+  function walk(items: NavItem[]): boolean {
+    for (const item of items) {
+      if (item.children) {
+        if (walk(item.children)) {
+          result[item.label] = true;
+          return true;
+        }
+      } else if (item.href && (pathname === item.href || pathname.startsWith(item.href + "/"))) {
+        return true;
+      }
+    }
+    return false;
+  }
+  walk(navItems);
+  return result;
+}
+
 export function Sidebar({ unreadCount = 0, brand }: { unreadCount?: number; brand: UniversityBrand }) {
   const pathname = usePathname();
   const { user } = useSupabaseAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({ "KPI Moduli": true, "Statistika": true });
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({ "Statistika": true });
 
   if (!user) return null;
 
@@ -202,74 +231,110 @@ export function Sidebar({ unreadCount = 0, brand }: { unreadCount?: number; bran
     return item.children?.some(isItemActive) ?? false;
   };
 
-  const renderItem = (item: NavItem, depth: number): React.ReactNode => {
-    if (item.children && depth < 2) {
-      const isOpen = openGroups[item.label];
-      const active = isItemActive(item);
-      const topLevel = depth === 0;
+  // Accordion: close all sibling groups, then toggle this one
+  function toggleGroup(label: string, siblings: NavItem[]) {
+    setOpenGroups(prev => {
+      const next = { ...prev };
+      for (const sib of siblings) {
+        if (sib.children) next[sib.label] = false;
+      }
+      next[label] = !prev[label];
+      return next;
+    });
+  }
+
+  const renderItem = (item: NavItem, depth: number, siblings: NavItem[]): React.ReactNode => {
+    const active = isItemActive(item);
+
+    // Group (has children)
+    if (item.children && item.children.length > 0) {
+      const isOpen = openGroups[item.label] ?? false;
+      const isTopLevel = depth === 0;
+
       return (
-        <div key={item.label} className="space-y-0.5">
+        <div key={item.label}>
           <button
-            onClick={() => setOpenGroups(p => ({ ...p, [item.label]: !p[item.label] }))}
-            className={`w-full flex items-center justify-between rounded-lg text-sm transition-all group hover:bg-surface-100 dark:hover:bg-surface-800 ${topLevel ? "px-3 py-2.5" : "pl-3 pr-3 py-2"}`}
+            onClick={() => toggleGroup(item.label, siblings)}
+            className="w-full flex items-center gap-2 rounded-lg transition-colors"
             style={{
-              background: active && !topLevel ? "var(--sidebar-active-bg)" : "transparent",
-              color: active && !topLevel ? "var(--sidebar-active-text)" : "var(--sidebar-text)",
+              padding: isTopLevel ? "8px 10px" : "6px 10px",
+              color: active ? "var(--sidebar-active-text)" : "var(--sidebar-text)",
+              background: active && !isTopLevel ? "var(--sidebar-active-bg)" : "transparent",
+            }}
+            onMouseEnter={(e) => {
+              if (!active || isTopLevel) (e.currentTarget as HTMLElement).style.background = "var(--sidebar-hover-bg)";
+            }}
+            onMouseLeave={(e) => {
+              if (active && !isTopLevel) (e.currentTarget as HTMLElement).style.background = "var(--sidebar-active-bg)";
+              else (e.currentTarget as HTMLElement).style.background = "transparent";
             }}
           >
-            <span className={topLevel ? "flex items-center gap-3" : "flex items-center gap-2"}>
-              {item.icon && (
-                <span className="shrink-0 transition-opacity" style={{ opacity: active ? 1 : 0.6 }}>
-                  {item.icon}
-                </span>
-              )}
-              <span className="font-medium" style={{ fontSize: topLevel ? "0.8125rem" : "0.75rem" }}>{item.label}</span>
+            {/* Left: icon (top-level) or dot (sub-level) */}
+            {isTopLevel ? (
+              <span style={{ opacity: active ? 1 : 0.6, flexShrink: 0 }}>{item.icon}</span>
+            ) : (
+              <Dot active={active} />
+            )}
+
+            {/* Label */}
+            <span
+              className="flex-1 text-left truncate"
+              style={{ fontSize: isTopLevel ? "0.8125rem" : "0.75rem", fontWeight: 500 }}
+            >
+              {item.label}
             </span>
-            <svg className={`${topLevel ? "w-4 h-4" : "w-3.5 h-3.5"} transition-transform ${isOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-            </svg>
+
+            {/* Chevron */}
+            <Chevron open={isOpen} size={isTopLevel ? 15 : 13} />
           </button>
+
           {isOpen && (
-            <div className={`${topLevel ? "pl-6" : "pl-3"} space-y-0.5`}>
-              {item.children.map(child => renderItem(child, depth + 1))}
+            <div style={{ paddingLeft: isTopLevel ? 22 : 14, paddingTop: 2, paddingBottom: 2 }}>
+              {item.children.map(child => renderItem(child, depth + 1, item.children!))}
             </div>
           )}
         </div>
       );
     }
 
-    const active = isItemActive(item);
+    // Leaf link
     const isNotif = item.href === "/notifications";
-    const itemKey = item.href || item.label;
-    const linkIndent = depth >= 2 ? "pl-6 pr-3 py-2" : "px-3 py-2.5";
     return (
       <Link
-        key={itemKey}
+        key={item.href || item.label}
         href={item.href!}
         onClick={() => setMobileOpen(false)}
-        className={`flex items-center justify-between rounded-lg text-sm transition-all group ${linkIndent}`}
+        className="flex items-center gap-2 rounded-lg transition-colors"
         style={{
-          background: active ? "var(--sidebar-active-bg)" : "transparent",
+          padding: depth === 0 ? "8px 10px" : "6px 10px",
           color: active ? "var(--sidebar-active-text)" : "var(--sidebar-text)",
+          background: active ? "var(--sidebar-active-bg)" : "transparent",
         }}
         onMouseEnter={(e) => {
           if (!active) (e.currentTarget as HTMLElement).style.background = "var(--sidebar-hover-bg)";
         }}
         onMouseLeave={(e) => {
-          if (!active) (e.currentTarget as HTMLElement).style.background = "transparent";
+          if (!active) (e.currentTarget as HTMLElement).style.background = active ? "var(--sidebar-active-bg)" : "transparent";
         }}
       >
-        <span className={`flex items-center ${depth >= 1 ? "gap-2" : "gap-3"}`}>
-          {item.icon && (
-            <span
-              className="shrink-0 transition-opacity"
-              style={{ opacity: active ? 1 : 0.6 }}
-            >
-              {item.icon}
-            </span>
-          )}
-          <span className="font-medium" style={{ fontSize: depth >= 2 ? "0.75rem" : "0.8125rem" }}>{item.label}</span>
+        {/* Left: icon (top-level) or dot (sub-level) */}
+        {depth === 0 ? (
+          item.icon && (
+            <span style={{ opacity: active ? 1 : 0.6, flexShrink: 0 }}>{item.icon}</span>
+          )
+        ) : (
+          <Dot active={active} />
+        )}
+
+        {/* Label */}
+        <span
+          className="flex-1 truncate"
+          style={{ fontSize: depth === 0 ? "0.8125rem" : "0.75rem", fontWeight: 500 }}
+        >
+          {item.label}
         </span>
+
+        {/* Notification badge */}
         {isNotif && unreadCount > 0 && (
           <span
             className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold rounded-full shrink-0"
@@ -288,8 +353,8 @@ export function Sidebar({ unreadCount = 0, brand }: { unreadCount?: number; bran
   const SidebarContent = () => (
     <div className="flex flex-col h-full" style={{ background: "var(--sidebar-bg)" }}>
       {/* Logo / Branding */}
-      <div className="h-16 flex items-center px-5 shrink-0">
-        <div className="flex items-center gap-3">
+      <div className="h-16 flex items-center px-4 shrink-0">
+        <div className="flex items-center gap-3 min-w-0">
           <div
             className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
             style={{ background: "rgba(255,255,255,0.12)" }}
@@ -314,16 +379,13 @@ export function Sidebar({ unreadCount = 0, brand }: { unreadCount?: number; bran
       </div>
 
       {/* Nav Items */}
-      <nav className="flex-1 overflow-y-auto px-3 py-3 space-y-0.5">
-        {items.map((item) => renderItem(item, 0))}
+      <nav className="flex-1 overflow-y-auto px-2 py-2 space-y-0.5">
+        {items.map(item => renderItem(item, 0, items))}
       </nav>
 
       {/* Footer: email */}
-      <div className="px-4 py-4 shrink-0" style={{ borderTop: "1px solid rgba(255,255,255,0.08)" }}>
-        <p
-          className="text-xs truncate font-medium"
-          style={{ color: "rgba(255,255,255,0.4)" }}
-        >
+      <div className="px-4 py-3 shrink-0" style={{ borderTop: "1px solid rgba(255,255,255,0.08)" }}>
+        <p className="text-xs truncate font-medium" style={{ color: "rgba(255,255,255,0.4)" }}>
           {user.email}
         </p>
       </div>
@@ -332,7 +394,7 @@ export function Sidebar({ unreadCount = 0, brand }: { unreadCount?: number; bran
 
   return (
     <>
-      {/* Mobile top bar (hamburger) */}
+      {/* Mobile top bar */}
       <div
         className="lg:hidden sticky top-0 z-40 h-14 flex items-center justify-between px-4"
         style={{ background: "var(--sidebar-bg)", boxShadow: "0 2px 8px rgba(0,0,0,0.2)" }}
@@ -353,10 +415,7 @@ export function Sidebar({ unreadCount = 0, brand }: { unreadCount?: number; bran
       {/* Mobile drawer */}
       {mobileOpen && (
         <div className="lg:hidden fixed inset-0 z-50 flex animate-fade-in">
-          <div
-            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-            onClick={() => setMobileOpen(false)}
-          />
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setMobileOpen(false)} />
           <aside className="relative w-72 max-w-[85%] flex flex-col shadow-institutional-lg overflow-hidden">
             <SidebarContent />
           </aside>
