@@ -10,13 +10,13 @@ DECLARE
   v_uni  uuid;
   fac    uuid;
 BEGIN
-  SELECT id INTO v_uni FROM universities WHERE short_code = 'uzswlu';
+  SELECT id INTO v_uni FROM universities WHERE short_code = 'UZSWLU';
   IF v_uni IS NULL THEN
-    RAISE EXCEPTION 'University with short_code=uzswlu not found. Run this after the university row exists.';
+    RAISE EXCEPTION 'University with short_code=UZSWLU not found. Run this after the university row exists.';
   END IF;
 
-  -- ── Ingliz 1 fakulteti ──────────────────────────────────────────────────
-  SELECT id INTO fac FROM faculties WHERE university_id = v_uni AND name = 'Ingliz 1 fakulteti';
+  -- ── Ingliz tili №1 fakulteti ────────────────────────────────────────────
+  SELECT id INTO fac FROM faculties WHERE university_id = v_uni AND name = 'Ingliz tili №1 fakulteti';
   IF fac IS NOT NULL THEN
     INSERT INTO departments (university_id, faculty_id, name, short_code) VALUES
       (v_uni, fac, 'Ingliz tili amaliy fanlar №1',         'ITAF'),
@@ -28,8 +28,8 @@ BEGIN
     ON CONFLICT (faculty_id, short_code) DO NOTHING;
   END IF;
 
-  -- ── Ingliz 2 fakulteti ──────────────────────────────────────────────────
-  SELECT id INTO fac FROM faculties WHERE university_id = v_uni AND name = 'Ingliz 2 fakulteti';
+  -- ── Ingliz tili №2 fakulteti ────────────────────────────────────────────
+  SELECT id INTO fac FROM faculties WHERE university_id = v_uni AND name = 'Ingliz tili №2 fakulteti';
   IF fac IS NOT NULL THEN
     INSERT INTO departments (university_id, faculty_id, name, short_code) VALUES
       (v_uni, fac, 'Ingliz tili amaliy fanlar №2',         'ITAF'),
@@ -41,8 +41,8 @@ BEGIN
     ON CONFLICT (faculty_id, short_code) DO NOTHING;
   END IF;
 
-  -- ── Ingliz 3 fakulteti ──────────────────────────────────────────────────
-  SELECT id INTO fac FROM faculties WHERE university_id = v_uni AND name = 'Ingliz 3 fakulteti';
+  -- ── Ingliz tili №3 fakulteti ────────────────────────────────────────────
+  SELECT id INTO fac FROM faculties WHERE university_id = v_uni AND name = 'Ingliz tili №3 fakulteti';
   IF fac IS NOT NULL THEN
     INSERT INTO departments (university_id, faculty_id, name, short_code) VALUES
       (v_uni, fac, 'Ingliz tili amaliy fanlar №3',         'ITAF'),
@@ -54,8 +54,8 @@ BEGIN
     ON CONFLICT (faculty_id, short_code) DO NOTHING;
   END IF;
 
-  -- ── Ingliz filologiyasi ──────────────────────────────────────────────────
-  SELECT id INTO fac FROM faculties WHERE university_id = v_uni AND name = 'Ingliz filologiyasi';
+  -- ── Ingliz filologiyasi fakulteti ───────────────────────────────────────
+  SELECT id INTO fac FROM faculties WHERE university_id = v_uni AND name = 'Ingliz filologiyasi fakulteti';
   IF fac IS NOT NULL THEN
     INSERT INTO departments (university_id, faculty_id, name, short_code) VALUES
       (v_uni, fac, 'Ingliz tili funksional leksika',                               'ITFL'),
@@ -66,8 +66,8 @@ BEGIN
     ON CONFLICT (faculty_id, short_code) DO NOTHING;
   END IF;
 
-  -- ── Romon german filologiyasi ────────────────────────────────────────────
-  SELECT id INTO fac FROM faculties WHERE university_id = v_uni AND name = 'Romon german filologiyasi';
+  -- ── Roman-german filologiyasi fakulteti ─────────────────────────────────
+  SELECT id INTO fac FROM faculties WHERE university_id = v_uni AND name = 'Roman-german filologiyasi fakulteti';
   IF fac IS NOT NULL THEN
     INSERT INTO departments (university_id, faculty_id, name, short_code) VALUES
       (v_uni, fac, 'Nemis tili amaliy fanlar',   'NTAF'),
@@ -79,8 +79,8 @@ BEGIN
     ON CONFLICT (faculty_id, short_code) DO NOTHING;
   END IF;
 
-  -- ── Rus filologiyasi ─────────────────────────────────────────────────────
-  SELECT id INTO fac FROM faculties WHERE university_id = v_uni AND name = 'Rus filologiyasi';
+  -- ── Rus filologiyasi fakulteti ───────────────────────────────────────────
+  SELECT id INTO fac FROM faculties WHERE university_id = v_uni AND name = 'Rus filologiyasi fakulteti';
   IF fac IS NOT NULL THEN
     INSERT INTO departments (university_id, faculty_id, name, short_code) VALUES
       (v_uni, fac, 'Rus tilini o''qitish metodikasi',        'RTOM'),
@@ -89,8 +89,8 @@ BEGIN
     ON CONFLICT (faculty_id, short_code) DO NOTHING;
   END IF;
 
-  -- ── Sharq filologiyasi ───────────────────────────────────────────────────
-  SELECT id INTO fac FROM faculties WHERE university_id = v_uni AND name = 'Sharq filologiyasi';
+  -- ── Sharq filologiyasi fakulteti ────────────────────────────────────────
+  SELECT id INTO fac FROM faculties WHERE university_id = v_uni AND name = 'Sharq filologiyasi fakulteti';
   IF fac IS NOT NULL THEN
     INSERT INTO departments (university_id, faculty_id, name, short_code) VALUES
       (v_uni, fac, 'Koreys filologiyasi',              'KF'),

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useSupabaseAuth } from "@/contexts/SupabaseAuthContext";
+import { createClient } from "@/lib/supabase/client";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -26,6 +27,20 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    const sb = createClient();
+    sb.rpc("public_university_branding").then(({ data, error }) => {
+      if (error) { console.error("branding rpc error:", error); return; }
+      const row = data?.[0];
+      if (!row?.login_logo_url) return;
+      const { data: urlData } = sb.storage
+        .from("university-logos")
+        .getPublicUrl(row.login_logo_url);
+      if (urlData?.publicUrl) setLogoUrl(urlData.publicUrl);
+    });
+  }, []);
 
   useEffect(() => {
     if (loading || profileLoading) return;
@@ -73,12 +88,16 @@ export default function LoginPage() {
         {/* Logo */}
         <div className="text-center mb-8">
           <div
-            className="inline-flex items-center justify-center w-14 h-14 rounded-2xl mb-4"
+            className="inline-flex items-center justify-center w-14 h-14 rounded-2xl mb-4 overflow-hidden"
             style={{ background: "linear-gradient(135deg, #002046 0%, #1b365d 100%)", boxShadow: "0 8px 24px rgba(0,32,70,0.25)" }}
           >
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-              <path d="M3 21h18M9 21V7l4-4 4 4v14M9 12h6" />
-            </svg>
+            {logoUrl ? (
+              <img src={logoUrl} alt="Universitet logotipi" className="w-14 h-14 object-cover" />
+            ) : (
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 21h18M9 21V7l4-4 4 4v14M9 12h6" />
+              </svg>
+            )}
           </div>
           <h1
             className="font-display font-bold mb-1"

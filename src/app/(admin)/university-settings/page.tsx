@@ -15,9 +15,11 @@ export default function UniversitySettingsPage() {
   const [university, setUniversity] = useState<University | null>(null);
   const [name, setName] = useState("");
   const [logoPreviewUrl, setLogoPreviewUrl] = useState("");
+  const [loginLogoPreviewUrl, setLoginLogoPreviewUrl] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [uploadingLoginLogo, setUploadingLoginLogo] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
@@ -53,6 +55,15 @@ export default function UniversitySettingsPage() {
       setLogoPreviewUrl(signedLogo?.signedUrl ?? "");
     } else {
       setLogoPreviewUrl("");
+    }
+
+    if (record.login_logo_url) {
+      const { data: signedLoginLogo } = await supabase.storage
+        .from("university-logos")
+        .createSignedUrl(record.login_logo_url, 60 * 60);
+      setLoginLogoPreviewUrl(signedLoginLogo?.signedUrl ?? "");
+    } else {
+      setLoginLogoPreviewUrl("");
     }
 
     setLoading(false);
@@ -148,6 +159,44 @@ export default function UniversitySettingsPage() {
     }
   };
 
+  const uploadLoginLogo = async (file: File | null) => {
+    if (!file || !university) return;
+
+    setUploadingLoginLogo(true);
+    setError("");
+    setMessage("");
+
+    try {
+      const extension = file.name.split(".").pop()?.toLowerCase() || "png";
+      const path = `${university.id}/login-logo.${extension}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("university-logos")
+        .upload(path, file, { upsert: true });
+
+      if (uploadError) throw uploadError;
+
+      const { error: updateError } = await supabase
+        .from("universities")
+        .update({ login_logo_url: path })
+        .eq("id", university.id);
+
+      if (updateError) throw updateError;
+
+      const { data: signedLogo } = await supabase.storage
+        .from("university-logos")
+        .createSignedUrl(path, 60 * 60);
+
+      setLoginLogoPreviewUrl(signedLogo?.signedUrl ?? "");
+      setUniversity({ ...university, login_logo_url: path });
+      setMessage("Kirish sahifasi logotipi yangilandi.");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Logotipni yuklashda xatolik yuz berdi.");
+    } finally {
+      setUploadingLoginLogo(false);
+    }
+  };
+
   if (loading) {
     return <div className="p-8 text-center text-surface-500">Yuklanmoqda...</div>;
   }
@@ -188,7 +237,7 @@ export default function UniversitySettingsPage() {
           </div>
         </form>
 
-        <section className="p-6">
+        <section className="p-6 border-b border-surface-200 dark:border-surface-700">
           <h2 className="text-lg font-semibold text-surface-900 dark:text-surface-100">Logotip</h2>
           <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-center">
             <label className="group flex h-32 w-32 cursor-pointer items-center justify-center overflow-hidden rounded-lg border border-dashed border-surface-300 bg-surface-50 text-surface-500 transition hover:bg-surface-100 dark:border-surface-600 dark:bg-surface-900/40 dark:text-surface-400 dark:hover:bg-surface-900">
@@ -212,6 +261,35 @@ export default function UniversitySettingsPage() {
               </p>
               <p className="mt-1 max-w-md text-sm text-surface-500 dark:text-surface-400">
                 PNG, JPG yoki WEBP formatidagi logotipni yuklang. Fayl universitet papkasida saqlanadi va sidebar brendingida ko&apos;rinadi.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <section className="p-6">
+          <h2 className="text-lg font-semibold text-surface-900 dark:text-surface-100">Kirish sahifasi logotipi</h2>
+          <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-center">
+            <label className="group flex h-32 w-32 cursor-pointer items-center justify-center overflow-hidden rounded-lg border border-dashed border-surface-300 bg-surface-50 text-surface-500 transition hover:bg-surface-100 dark:border-surface-600 dark:bg-surface-900/40 dark:text-surface-400 dark:hover:bg-surface-900">
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                className="hidden"
+                onChange={(e) => uploadLoginLogo(e.target.files?.[0] ?? null)}
+              />
+              {loginLogoPreviewUrl ? (
+                <img src={loginLogoPreviewUrl} alt="Kirish sahifasi logotipi" className="h-full w-full object-cover" />
+              ) : (
+                <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M3 21h18M9 21V7l4-4 4 4v14M9 12h6" />
+                </svg>
+              )}
+            </label>
+            <div>
+              <p className="text-sm font-medium text-surface-900 dark:text-surface-100">
+                {uploadingLoginLogo ? "Yuklanmoqda..." : loginLogoPreviewUrl ? "Logotipni almashtirish" : "Logotip yuklash"}
+              </p>
+              <p className="mt-1 max-w-md text-sm text-surface-500 dark:text-surface-400">
+                Kirish sahifasida ko&apos;rsatiladigan logotip. Sidebar logotipidan alohida saqlanadi.
               </p>
             </div>
           </div>
