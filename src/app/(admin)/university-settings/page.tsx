@@ -6,7 +6,8 @@ import { createClient } from "@/lib/supabase/client";
 import { useSupabaseAuth } from "@/contexts/SupabaseAuthContext";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import type { University } from "@/types/db";
+import { Modal } from "@/components/ui/Modal";
+import type { AcademicYear, University } from "@/types/db";
 
 export default function UniversitySettingsPage() {
   const router = useRouter();
@@ -22,6 +23,27 @@ export default function UniversitySettingsPage() {
   const [uploadingLoginLogo, setUploadingLoginLogo] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+
+  // Academic years
+  const [years, setYears] = useState<AcademicYear[]>([]);
+  const [yearModalOpen, setYearModalOpen] = useState(false);
+  const [editingYear, setEditingYear] = useState<AcademicYear | null>(null);
+  const [yearName, setYearName] = useState("");
+  const [yearStart, setYearStart] = useState("");
+  const [yearEnd, setYearEnd] = useState("");
+  const [yearIsActive, setYearIsActive] = useState(false);
+  const [yearSaving, setYearSaving] = useState(false);
+  const [yearError, setYearError] = useState("");
+
+  const loadYears = useCallback(async () => {
+    if (!user?.university_id) return;
+    const { data } = await supabase
+      .from("academic_years")
+      .select("*")
+      .eq("university_id", user.university_id)
+      .order("name");
+    setYears((data as AcademicYear[]) ?? []);
+  }, [supabase, user?.university_id]);
 
   const load = useCallback(async () => {
     if (!user) return;
@@ -66,12 +88,71 @@ export default function UniversitySettingsPage() {
       setLoginLogoPreviewUrl("");
     }
 
+    await loadYears();
     setLoading(false);
-  }, [router, supabase, user]);
+  }, [router, supabase, user, loadYears]);
 
   useEffect(() => {
     load();
   }, [load]);
+
+  const openCreateYear = () => {
+    setEditingYear(null);
+    setYearName("");
+    setYearStart("");
+    setYearEnd("");
+    setYearIsActive(years.length === 0);
+    setYearError("");
+    setYearModalOpen(true);
+  };
+
+  const openEditYear = (y: AcademicYear) => {
+    setEditingYear(y);
+    setYearName(y.name);
+    setYearStart(y.start_date);
+    setYearEnd(y.end_date);
+    setYearIsActive(y.is_active);
+    setYearError("");
+    setYearModalOpen(true);
+  };
+
+  const saveYear = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setYearError("");
+    if (!user?.university_id) return;
+    const trimmed = yearName.trim();
+    if (!trimmed || !yearStart || !yearEnd) {
+      setYearError("Barcha maydonlar talab qilinadi.");
+      return;
+    }
+    setYearSaving(true);
+    const payload = {
+      name: trimmed,
+      start_date: yearStart,
+      end_date: yearEnd,
+      is_active: yearIsActive,
+      university_id: user.university_id,
+    };
+    const { error: err } = editingYear
+      ? await supabase.from("academic_years").update(payload).eq("id", editingYear.id)
+      : await supabase.from("academic_years").insert(payload);
+    setYearSaving(false);
+    if (err) {
+      setYearError(
+        err.code === "23505" ? "Bu universitetda faol o'quv yili allaqachon mavjud." : err.message
+      );
+      return;
+    }
+    setYearModalOpen(false);
+    loadYears();
+  };
+
+  const deleteYear = async (y: AcademicYear) => {
+    if (!confirm(`"${y.name}" o'quv yilini o'chirishni tasdiqlaysizmi?`)) return;
+    const { error: err } = await supabase.from("academic_years").delete().eq("id", y.id);
+    if (err) { alert(err.message); return; }
+    loadYears();
+  };
 
   const saveName = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -266,7 +347,7 @@ export default function UniversitySettingsPage() {
           </div>
         </section>
 
-        <section className="p-6">
+        <section className="p-6 border-b border-surface-200 dark:border-surface-700">
           <h2 className="text-lg font-semibold text-surface-900 dark:text-surface-100">Kirish sahifasi logotipi</h2>
           <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-center">
             <label className="group flex h-32 w-32 cursor-pointer items-center justify-center overflow-hidden rounded-lg border border-dashed border-surface-300 bg-surface-50 text-surface-500 transition hover:bg-surface-100 dark:border-surface-600 dark:bg-surface-900/40 dark:text-surface-400 dark:hover:bg-surface-900">
@@ -295,6 +376,117 @@ export default function UniversitySettingsPage() {
           </div>
         </section>
       </div>
+
+      {/* Academic Years */}
+      <div className="mt-6 bg-white dark:bg-surface-800 rounded-lg border border-surface-200 dark:border-surface-700 overflow-hidden">
+        <div className="px-6 py-4 border-b border-surface-200 dark:border-surface-700 flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-surface-900 dark:text-surface-100">O'quv yillari</h2>
+            <p className="text-sm text-surface-500 dark:text-surface-400 mt-0.5">
+              O'quv jarayoni uchun yillar. Bir vaqtda faqat bitta faol yil bo'lishi mumkin.
+            </p>
+          </div>
+          <Button onClick={openCreateYear}>+ Yangi yil</Button>
+        </div>
+
+        {years.length === 0 ? (
+          <div className="p-6 text-center text-sm text-surface-500">O'quv yili mavjud emas.</div>
+        ) : (
+          <table className="w-full text-sm">
+            <thead className="bg-surface-50 dark:bg-surface-900/50">
+              <tr>
+                <th className="px-5 py-3 text-left text-xs font-semibold text-surface-500 uppercase">Yil nomi</th>
+                <th className="px-5 py-3 text-left text-xs font-semibold text-surface-500 uppercase">Boshlanish</th>
+                <th className="px-5 py-3 text-left text-xs font-semibold text-surface-500 uppercase">Tugash</th>
+                <th className="px-5 py-3 text-left text-xs font-semibold text-surface-500 uppercase">Holat</th>
+                <th className="px-5 py-3" />
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-surface-100 dark:divide-surface-700">
+              {years.map(y => (
+                <tr key={y.id} className="hover:bg-surface-50 dark:hover:bg-surface-900/30">
+                  <td className="px-5 py-3 font-medium">{y.name}</td>
+                  <td className="px-5 py-3 text-surface-500">{y.start_date}</td>
+                  <td className="px-5 py-3 text-surface-500">{y.end_date}</td>
+                  <td className="px-5 py-3">
+                    {y.is_active ? (
+                      <span className="inline-flex px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400">
+                        Faol
+                      </span>
+                    ) : (
+                      <span className="inline-flex px-2 py-0.5 rounded text-xs font-medium bg-surface-100 text-surface-500 dark:bg-surface-700 dark:text-surface-400">
+                        Nofaol
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-5 py-3 text-right space-x-2">
+                    <Button variant="outline" size="sm" onClick={() => openEditYear(y)}>Tahrirlash</Button>
+                    {!y.is_active && (
+                      <Button variant="danger" size="sm" onClick={() => deleteYear(y)}>O'chirish</Button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      {/* Academic Year Modal */}
+      <Modal
+        isOpen={yearModalOpen}
+        onClose={() => setYearModalOpen(false)}
+        title={editingYear ? "O'quv yilini tahrirlash" : "Yangi o'quv yili"}
+      >
+        <form onSubmit={saveYear} className="space-y-4">
+          {yearError && (
+            <div className="p-3 bg-danger-50 dark:bg-danger-900/30 text-danger-600 dark:text-danger-400 rounded-lg text-sm">{yearError}</div>
+          )}
+          <Input
+            label="Yil nomi"
+            value={yearName}
+            onChange={e => setYearName(e.target.value)}
+            placeholder="2024-2025"
+            required
+          />
+          <div className="grid grid-cols-2 gap-3">
+            <Input
+              label="Boshlanish sanasi"
+              type="date"
+              value={yearStart}
+              onChange={e => setYearStart(e.target.value)}
+              required
+            />
+            <Input
+              label="Tugash sanasi"
+              type="date"
+              value={yearEnd}
+              onChange={e => setYearEnd(e.target.value)}
+              required
+            />
+          </div>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={yearIsActive}
+              onChange={e => setYearIsActive(e.target.checked)}
+              className="rounded"
+            />
+            <span className="text-sm text-surface-700 dark:text-surface-300">
+              Faol o'quv yili sifatida belgilash
+            </span>
+          </label>
+          {yearIsActive && (
+            <p className="text-xs text-amber-600 dark:text-amber-400">
+              Faol qilinganda, avvalgi faol yil avtomatik nofaol bo'lmaydi — DB darajasida unique constraint bor. Avval boshqasini nofaol qiling.
+            </p>
+          )}
+          <div className="flex justify-end gap-2 pt-2">
+            <Button type="button" variant="outline" onClick={() => setYearModalOpen(false)}>Bekor qilish</Button>
+            <Button type="submit" isLoading={yearSaving}>{editingYear ? "Saqlash" : "Yaratish"}</Button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 }

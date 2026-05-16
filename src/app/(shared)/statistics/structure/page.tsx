@@ -17,6 +17,7 @@ import {
 } from "recharts";
 import { Skeleton } from "@/components/ui/Skeleton";
 import type { HemisStatStructureData } from "@/app/api/hemis/stat-structure/route";
+import type { HemisStatStudentData } from "@/app/api/hemis/stat-student/route";
 
 interface Stat {
   label: string;
@@ -81,20 +82,31 @@ export default function StructureStatsPage() {
   const [error, setError] = useState<string | null>(null);
   const [cachedAt, setCachedAt] = useState<Date | null>(null);
   const [isStale, setIsStale] = useState(false);
+  const [realStudentCount, setRealStudentCount] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/hemis/stat-structure", { cache: "no-store" });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body.error ?? `HTTP ${res.status}`);
+      const [structRes, studentRes] = await Promise.all([
+        fetch("/api/hemis/stat-structure", { cache: "no-store" }),
+        fetch("/api/hemis/stat-student", { cache: "no-store" }),
+      ]);
+      if (!structRes.ok) {
+        const body = await structRes.json().catch(() => ({}));
+        throw new Error(body.error ?? `HTTP ${structRes.status}`);
       }
-      const json = await res.json();
+      const json = await structRes.json();
       setData(json.data as HemisStatStructureData);
       setCachedAt(json.cached_at ? new Date(json.cached_at) : new Date());
       setIsStale(json.stale === true);
+
+      if (studentRes.ok) {
+        const sJson = await studentRes.json();
+        const sData = sJson.data as HemisStatStudentData;
+        const jami = sData?.education_type?.Jami;
+        if (jami) setRealStudentCount((jami.Erkak ?? 0) + (jami.Ayol ?? 0));
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Ma'lumotni yuklab bo'lmadi");
     } finally {
@@ -147,10 +159,13 @@ export default function StructureStatsPage() {
 
   const kpis: Stat[] = data
     ? [
-        { label: "Jami talabalar", value: totalStudents, tone: "primary" },
-        ...eduTypes.map((edu) => ({ label: edu, value: totalByEdu[edu] ?? 0 })),
-        { label: "Jami auditoriyalar", value: totalAuditoriums, tone: "success" },
-        { label: "Mutaxassisliklar", value: data.specialities.reduce((s, r) => s + r.count, 0), tone: "warning" },
+        ...(realStudentCount !== null
+          ? [{ label: "Jami talabalar", value: realStudentCount, tone: "primary" as const }]
+          : []),
+        { label: "Jami guruhlar", value: totalStudents },
+        ...eduTypes.map((edu) => ({ label: `${edu} guruhlari`, value: totalByEdu[edu] ?? 0 })),
+        { label: "Jami auditoriyalar", value: totalAuditoriums, tone: "success" as const },
+        { label: "Mutaxassisliklar", value: data.specialities.reduce((s, r) => s + r.count, 0), tone: "warning" as const },
       ]
     : [];
 
@@ -198,14 +213,14 @@ export default function StructureStatsPage() {
 
       {/* KPI strip */}
       {loading && !data ? (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
-          {Array.from({ length: 5 }).map((_, i) => (
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+          {Array.from({ length: 6 }).map((_, i) => (
             <Skeleton key={i} className="h-24" />
           ))}
         </div>
       ) : (
         data && (
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
             {kpis.map((s) => (
               <StatCard key={s.label} stat={s} />
             ))}

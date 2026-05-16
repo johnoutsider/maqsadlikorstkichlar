@@ -37,3 +37,7 @@ next-env.d.ts
 
 # admin service account
 scripts/serviceAccountKey.json
+
+# local agent and Supabase CLI runtime files
+.claude/worktrees/
+supabase/.temp/

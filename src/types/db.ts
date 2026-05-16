@@ -260,3 +260,149 @@ export interface ProgressReport {
   feedback_at: string | null;
   created_at: string;
 }
+
+// ============================================================================
+// O'quv jarayoni (Curriculum)
+// ============================================================================
+
+export type EducationType  = 'bakalavr' | 'magistr';
+export type GroupType      = 'amaliy' | 'seminar' | 'maruza';
+export type Semester       = 'kuzgi' | 'bahorgi';
+export type WorkType =
+  | 'maruza' | 'seminar' | 'amaliy' | 'reyting' | 'malaka_amaliyoti'
+  | 'bmi_rahbarlik' | 'yada' | 'md_rahbarlik' | 'mustaqil_tadqiqot'
+  | 'doktorantura' | 'kurs_ishi';
+export type WorkPlanStatus = 'draft' | 'submitted' | 'approved' | 'rejected';
+
+export const WORK_TYPE_LABELS: Record<WorkType, string> = {
+  maruza:             "Ma'ruza",
+  seminar:            "Seminar",
+  amaliy:             "Amaliy",
+  reyting:            "Reyting",
+  malaka_amaliyoti:   "Malaka amaliyoti",
+  bmi_rahbarlik:      "BMI rahbarligi",
+  yada:               "YADA",
+  md_rahbarlik:       "MD rahbarligi",
+  mustaqil_tadqiqot:  "Mustaqil tadqiqot",
+  doktorantura:       "Doktorantura",
+  kurs_ishi:          "Kurs ishi",
+};
+
+export const GROUP_TYPE_LABELS: Record<GroupType, string> = {
+  amaliy:  "Amaliy",
+  seminar: "Seminar",
+  maruza:  "Ma'ruza",
+};
+
+export const SEMESTER_LABELS: Record<Semester, string> = {
+  kuzgi:   "Kuzgi semestr",
+  bahorgi: "Bahorgi semestr",
+};
+
+export const WORK_PLAN_STATUS_LABELS: Record<WorkPlanStatus, string> = {
+  draft:     "Qoralama",
+  submitted: "Yuborilgan",
+  approved:  "Tasdiqlangan",
+  rejected:  "Rad etilgan",
+};
+
+export interface AcademicYear {
+  id: string;
+  university_id: string;
+  name: string;
+  start_date: string;
+  end_date: string;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface Subject {
+  id: string;
+  university_id: string;
+  faculty_id: string;
+  department_id: string;
+  academic_year_id: string;
+  name: string;
+  course: number;
+  education_type: EducationType;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface StudyGroup {
+  id: string;
+  university_id: string;
+  faculty_id: string;
+  academic_year_id: string;
+  name: string;
+  course: number;
+  education_type: EducationType;
+  group_type: GroupType;
+  student_count: number;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface StudyGroupMember {
+  parent_group_id: string;
+  child_group_id: string;
+}
+
+export type WorkloadHours = Record<WorkType, number>;
+
+export interface SubjectWorkload {
+  id: string;
+  subject_id: string;
+  semester: Semester;
+  maruza_h: number;
+  seminar_h: number;
+  amaliy_h: number;
+  reyting_h: number;
+  malaka_amaliyoti_h: number;
+  bmi_rahbarlik_h: number;
+  yada_h: number;
+  md_rahbarlik_h: number;
+  mustaqil_tadqiqot_h: number;
+  doktorantura_h: number;
+  kurs_ishi_h: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TeacherWorkPlan {
+  id: string;
+  university_id: string;
+  teacher_id: string;
+  academic_year_id: string;
+  position: string | null;
+  stavka: string | null;
+  status: WorkPlanStatus;
+  rejection_reason: string | null;
+  submitted_at: string | null;
+  reviewed_at: string | null;
+  reviewed_by: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TeacherAllocation {
+  id: string;
+  work_plan_id: string;
+  subject_id: string;
+  group_id: string | null;
+  semester: Semester;
+  work_type: WorkType;
+  hours: number;
+  created_at: string;
+  updated_at: string;
+}
+
+// WorkType → required group_type (null means no group needed)
+export const WORK_TYPE_GROUP_MAP: Partial<Record<WorkType, GroupType>> = {
+  maruza:  'maruza',
+  seminar: 'seminar',
+  amaliy:  'amaliy',
+};
