@@ -105,10 +105,19 @@ const NAV: NavItem[] = [
     ],
   },
   {
+    label: "O'quv bo'limi",
+    icon: <Icon d="M3 7l9-4 9 4-9 4-9-4zm0 6l9 4 9-4M3 17l9 4 9-4" />,
+    roles: ["oquv_bolimi"],
+    children: [
+      { href: "/oquv-bolimi/workload",          label: "Kafedralar yuklamasi",  roles: ["oquv_bolimi"] },
+      { href: "/oquv-bolimi/subject-workload",  label: "Fan bo'yicha yuklama",  roles: ["oquv_bolimi"] },
+    ],
+  },
+  {
     href: "/teachers",
     label: "O'qituvchilar ro'yxati",
     icon: <Icon d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8m13 2v2m0-4v2m-2-2h4" />,
-    roles: ["staff_manager", "dean", "science_department", "university_admin", "vice_rector"],
+    roles: ["staff_manager", "dean", "science_department", "university_admin", "vice_rector", "oquv_bolimi"],
   },
   {
     href: "/form",
@@ -203,7 +212,7 @@ const NAV: NavItem[] = [
     href: "/notifications",
     label: "Bildirishnomalar",
     icon: <Icon d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6 6 0 10-12 0v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />,
-    roles: ["super_admin", "university_admin", "vice_rector", "science_department", "dean", "staff_manager", "doktorant", "supervisor"],
+    roles: ["super_admin", "university_admin", "vice_rector", "science_department", "dean", "staff_manager", "oquv_bolimi", "doktorant", "supervisor"],
   },
 ];
 

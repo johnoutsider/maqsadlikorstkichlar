@@ -1,11 +1,13 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { useSupabaseAuth } from "@/contexts/SupabaseAuthContext";
+import { cacheGet, cacheSet } from "@/lib/curriculum-cache";
 import type {
-  AcademicYear, Teacher, TeacherAllocation, TeacherWorkPlan, WorkPlanStatus, WorkType,
+  AcademicYear, Department, Teacher, TeacherAllocation, TeacherWorkPlan, WorkPlanStatus, WorkType,
 } from "@/types/db";
 import { WORK_PLAN_STATUS_LABELS } from "@/types/db";
 
@@ -26,8 +28,13 @@ export default function PersonalPlansPage() {
   const supabase = createClient();
   const { user } = useSupabaseAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
+
+  // ?department=<id> — set by oquv_bolimi workload drill-in
+  const deptParam = searchParams.get("department");
 
   const [teachers, setTeachers] = useState<Teacher[]>([]);
+  const [departments, setDepartments] = useState<Department[]>([]);
   const [plans, setPlans] = useState<TeacherWorkPlan[]>([]);
   const [allocations, setAllocations] = useState<TeacherAllocation[]>([]);
   const [years, setYears] = useState<AcademicYear[]>([]);
@@ -35,10 +42,26 @@ export default function PersonalPlansPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  const isManager = user?.role === "staff_manager";
+  const isManager    = user?.role === "staff_manager";
+  const isOquvBolimi = user?.role === "oquv_bolimi";
 
   const load = useCallback(async () => {
     if (!user?.university_id) return;
+
+    // oquv_bolimi: try module-level cache first (populated by workload page)
+    if (isOquvBolimi) {
+      const cached = cacheGet(user.university_id);
+      if (cached) {
+        setTeachers(cached.teachers);
+        setDepartments(cached.departments);
+        setPlans(cached.plans);
+        setAllocations(cached.allocations);
+        setYears(cached.years);
+        setLoading(false);
+        return;
+      }
+    }
+
     setLoading(true);
     setError("");
 
@@ -51,18 +74,41 @@ export default function PersonalPlansPage() {
     setYears(fetchedYears);
     setTeachers(fetchedTeachers);
 
+    let fetchedDepts: Department[] = [];
+    if (isOquvBolimi) {
+      const { data } = await supabase.from("departments").select("*").eq("university_id", user.university_id);
+      fetchedDepts = (data as Department[]) ?? [];
+      setDepartments(fetchedDepts);
+    }
+
     if (fetchedTeachers.length > 0) {
       const ids = fetchedTeachers.map(t => t.id);
       const [pr, ar] = await Promise.all([
         supabase.from("teacher_work_plans").select("*").in("teacher_id", ids),
         supabase.from("teacher_allocations").select("*"),
       ]);
-      setPlans((pr.data as TeacherWorkPlan[]) ?? []);
-      setAllocations((ar.data as TeacherAllocation[]) ?? []);
+      const fetchedPlans = (pr.data as TeacherWorkPlan[]) ?? [];
+      const fetchedAllocs = (ar.data as TeacherAllocation[]) ?? [];
+      setPlans(fetchedPlans);
+      setAllocations(fetchedAllocs);
+
+      // Warm cache for oquv_bolimi so workload back-navigation is instant
+      if (isOquvBolimi) {
+        cacheSet(user.university_id, {
+          teachers: fetchedTeachers,
+          plans: fetchedPlans,
+          allocations: fetchedAllocs,
+          years: fetchedYears,
+          departments: fetchedDepts,
+          faculties: [],
+          subjects: [],
+          groups: [],
+        });
+      }
     }
     if (tr.error) setError(tr.error.message);
     setLoading(false);
-  }, [supabase, user?.university_id]);
+  }, [supabase, user?.university_id, isOquvBolimi]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -89,26 +135,51 @@ export default function PersonalPlansPage() {
     return m;
   }, [allocations]);
 
+  // Department name for breadcrumb (oquv_bolimi drill-in)
+  const activeDeptName = useMemo(() => {
+    if (!deptParam || !departments.length) return null;
+    return departments.find(d => d.id === deptParam)?.name ?? null;
+  }, [deptParam, departments]);
+
   const visibleTeachers = useMemo(() =>
     teachers.filter(t => {
       if (isManager && user?.department_id && t.department_id !== user.department_id) return false;
+      // oquv_bolimi drill-in: filter to selected kafedra
+      if (isOquvBolimi && deptParam && t.department_id !== deptParam) return false;
       return true;
     }),
-    [teachers, isManager, user?.department_id]
+    [teachers, isManager, isOquvBolimi, deptParam, user?.department_id]
   );
 
   const handleRowClick = (teacherId: string) => {
     router.push(`/curriculum/personal-plans/${teacherId}`);
   };
 
+  const subtitle = isOquvBolimi && activeDeptName
+    ? activeDeptName
+    : isManager
+      ? "Kafedra o'qituvchilarining yillik yuklamasi"
+      : "Fakultet o'qituvchilarining yuklamasi";
+
   return (
     <div className="p-4 md:p-6 space-y-4">
+      {/* Breadcrumb back link for oquv_bolimi drill-in */}
+      {isOquvBolimi && (
+        <Link
+          href="/oquv-bolimi/workload"
+          className="inline-flex items-center gap-1.5 text-sm text-surface-500 hover:text-surface-900 dark:hover:text-surface-100 transition-colors"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+            <path d="M19 12H5M12 5l-7 7 7 7" />
+          </svg>
+          Kafedralar yuklamasiga qaytish
+        </Link>
+      )}
+
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-surface-900 dark:text-surface-100">Shaxsiy ish reja</h1>
-          <p className="text-sm text-surface-500 dark:text-surface-400 mt-0.5">
-            {isManager ? "Kafedra o'qituvchilarining yillik yuklamasi" : "Fakultet o'qituvchilarining yuklamasi"}
-          </p>
+          <p className="text-sm text-surface-500 dark:text-surface-400 mt-0.5">{subtitle}</p>
         </div>
         <select
           value={filterYear}
@@ -138,7 +209,7 @@ export default function PersonalPlansPage() {
                 <th className="px-4 py-3 text-left text-xs font-semibold text-surface-600 dark:text-surface-400 uppercase">Stavka</th>
                 {WORK_TYPES.slice(0, 4).map(wt => (
                   <th key={wt} className="px-3 py-3 text-center text-xs font-semibold text-surface-600 dark:text-surface-400 uppercase whitespace-nowrap">
-                    {wt.slice(0, 6)}
+                    {wt === "maruza" ? "Ma'ruza" : wt === "seminar" ? "Seminar" : wt === "amaliy" ? "Amaliy" : "Reyting"}
                   </th>
                 ))}
                 <th className="px-3 py-3 text-center text-xs font-semibold text-surface-600 dark:text-surface-400 uppercase">Jami</th>

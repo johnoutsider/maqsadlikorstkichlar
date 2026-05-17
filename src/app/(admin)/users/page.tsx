@@ -25,6 +25,7 @@ const ROLE_LABEL: Record<string, string> = {
   science_department: "Ilmiy bo'lim",
   dean: "Dekan",
   staff_manager: "Kafedra mudiri",
+  oquv_bolimi: "O'quv bo'limi",
   supervisor: "Ilmiy rahbar",
   doktorant: "Doktorant",
 };
@@ -35,6 +36,7 @@ const ALL_ASSIGNABLE_ROLES: RoleName[] = [
   "science_department",
   "dean",
   "staff_manager",
+  "oquv_bolimi",
 ];
 
 export default function UsersPage() {

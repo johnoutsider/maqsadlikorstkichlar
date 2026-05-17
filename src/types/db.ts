@@ -47,6 +47,7 @@ export type RoleName =
   | "science_department"
   | "dean"
   | "staff_manager"
+  | "oquv_bolimi"
   | "doktorant"
   | "supervisor"
   | (string & {});
@@ -398,6 +399,17 @@ export interface TeacherAllocation {
   hours: number;
   created_at: string;
   updated_at: string;
+}
+
+export interface WorkPlanApprovalLog {
+  id: string;
+  work_plan_id: string;
+  reviewer_id: string;
+  reviewer_name: string;
+  reviewer_role: string;
+  action: 'approved' | 'rejected';
+  reason: string | null;
+  created_at: string;
 }
 
 // WorkType → required group_type (null means no group needed)
