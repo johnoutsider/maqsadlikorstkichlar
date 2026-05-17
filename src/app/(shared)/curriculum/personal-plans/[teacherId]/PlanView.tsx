@@ -327,6 +327,8 @@ export function PlanView({
 
   // ── Render ────────────────────────────────────────────────────────────────
   const fullName = `${teacher.last_name} ${teacher.first_name}${teacher.middle_name ? " " + teacher.middle_name : ""}`;
+  const displayPosition = teacher.lavozim ?? plan?.position ?? "Lavozim ko'rsatilmagan";
+  const displayStavka = teacher.stavka ?? plan?.stavka ?? "";
 
   const vhStyle: React.CSSProperties = {
     writingMode: "vertical-rl",
@@ -449,8 +451,8 @@ export function PlanView({
         <div>
           <h1 className="text-2xl font-bold text-surface-900 dark:text-surface-100">{fullName}</h1>
           <p className="text-sm text-surface-500 dark:text-surface-400 mt-0.5">
-            {plan?.position ?? teacher.lavozim ?? "Lavozim ko'rsatilmagan"}
-            {(plan?.stavka ?? teacher.stavka) && ` · ${plan?.stavka ?? teacher.stavka} stavka`}
+            {displayPosition}
+            {displayStavka && ` · ${displayStavka} stavka`}
             {activeYear && ` · ${activeYear.name}`}
           </p>
         </div>

@@ -9,7 +9,7 @@ import { cacheGet, cacheSet } from "@/lib/curriculum-cache";
 import type {
   AcademicYear, Department, Teacher, TeacherAllocation, TeacherWorkPlan, WorkPlanStatus, WorkType,
 } from "@/types/db";
-import { WORK_PLAN_STATUS_LABELS } from "@/types/db";
+import { WORK_PLAN_STATUS_LABELS, WORK_TYPE_LABELS } from "@/types/db";
 
 const STATUS_COLORS: Record<WorkPlanStatus, string> = {
   draft:     "bg-surface-100 text-surface-600 dark:bg-surface-700 dark:text-surface-300",
@@ -23,6 +23,7 @@ const WORK_TYPES: WorkType[] = [
   "bmi_rahbarlik", "yada", "md_rahbarlik", "mustaqil_tadqiqot",
   "doktorantura", "kurs_ishi",
 ];
+const DEFAULT_WORK_TYPES: WorkType[] = ["maruza", "seminar", "amaliy", "reyting"];
 
 export default function PersonalPlansPage() {
   const supabase = createClient();
@@ -151,6 +152,24 @@ export default function PersonalPlansPage() {
     [teachers, isManager, isOquvBolimi, deptParam, user?.department_id]
   );
 
+  const visibleWorkTypes = useMemo(() => {
+    const used = new Set<WorkType>(DEFAULT_WORK_TYPES);
+
+    for (const teacher of visibleTeachers) {
+      const plan = filterYear ? planByTeacherYear.get(`${teacher.id}:${filterYear}`) : undefined;
+      if (!plan) continue;
+
+      const hours = hoursByPlan.get(plan.id);
+      if (!hours) continue;
+
+      for (const workType of WORK_TYPES) {
+        if ((hours[workType] ?? 0) > 0) used.add(workType);
+      }
+    }
+
+    return WORK_TYPES.filter(workType => used.has(workType));
+  }, [visibleTeachers, filterYear, planByTeacherYear, hoursByPlan]);
+
   const handleRowClick = (teacherId: string) => {
     router.push(`/curriculum/personal-plans/${teacherId}`);
   };
@@ -160,6 +179,10 @@ export default function PersonalPlansPage() {
     : isManager
       ? "Kafedra o'qituvchilarining yillik yuklamasi"
       : "Fakultet o'qituvchilarining yuklamasi";
+
+  const teachersListHref = deptParam
+    ? `/teachers?department=${encodeURIComponent(deptParam)}`
+    : "/teachers";
 
   return (
     <div className="p-4 md:p-6 space-y-4">
@@ -181,14 +204,22 @@ export default function PersonalPlansPage() {
           <h1 className="text-2xl font-bold text-surface-900 dark:text-surface-100">Shaxsiy ish reja</h1>
           <p className="text-sm text-surface-500 dark:text-surface-400 mt-0.5">{subtitle}</p>
         </div>
-        <select
-          value={filterYear}
-          onChange={e => setFilterYear(e.target.value)}
-          className="rounded-md border border-surface-300 dark:border-surface-600 bg-white dark:bg-surface-800 px-3 py-2 text-sm"
-        >
-          <option value="">Barcha yillar</option>
-          {years.map(y => <option key={y.id} value={y.id}>{y.name}{y.is_active ? " (faol)" : ""}</option>)}
-        </select>
+        <div className="flex flex-col sm:flex-row gap-2">
+          <Link
+            href={teachersListHref}
+            className="inline-flex items-center justify-center rounded-md border border-surface-300 bg-white px-3 py-2 text-sm font-medium text-surface-700 transition hover:bg-surface-50 dark:border-surface-600 dark:bg-surface-800 dark:text-surface-100 dark:hover:bg-surface-700"
+          >
+            O&apos;qituvchilar ro&apos;yxati
+          </Link>
+          <select
+            value={filterYear}
+            onChange={e => setFilterYear(e.target.value)}
+            className="rounded-md border border-surface-300 dark:border-surface-600 bg-white dark:bg-surface-800 px-3 py-2 text-sm"
+          >
+            <option value="">Barcha yillar</option>
+            {years.map(y => <option key={y.id} value={y.id}>{y.name}{y.is_active ? " (faol)" : ""}</option>)}
+          </select>
+        </div>
       </div>
 
       {error && (
@@ -199,7 +230,7 @@ export default function PersonalPlansPage() {
         {loading ? (
           <div className="p-8 text-center text-surface-500">Yuklanmoqda...</div>
         ) : visibleTeachers.length === 0 ? (
-          <div className="p-8 text-center text-surface-500">O'qituvchi topilmadi.</div>
+          <div className="p-8 text-center text-surface-500">O&apos;qituvchi topilmadi.</div>
         ) : (
           <table className="w-full text-sm">
             <thead className="bg-surface-50 dark:bg-surface-900/50 border-b border-surface-200 dark:border-surface-700">
@@ -207,9 +238,9 @@ export default function PersonalPlansPage() {
                 <th className="px-4 py-3 text-left text-xs font-semibold text-surface-600 dark:text-surface-400 uppercase">F.I.Sh</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-surface-600 dark:text-surface-400 uppercase">Lavozim</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-surface-600 dark:text-surface-400 uppercase">Stavka</th>
-                {WORK_TYPES.slice(0, 4).map(wt => (
+                {visibleWorkTypes.map(wt => (
                   <th key={wt} className="px-3 py-3 text-center text-xs font-semibold text-surface-600 dark:text-surface-400 uppercase whitespace-nowrap">
-                    {wt === "maruza" ? "Ma'ruza" : wt === "seminar" ? "Seminar" : wt === "amaliy" ? "Amaliy" : "Reyting"}
+                    {WORK_TYPE_LABELS[wt]}
                   </th>
                 ))}
                 <th className="px-3 py-3 text-center text-xs font-semibold text-surface-600 dark:text-surface-400 uppercase">Jami</th>
@@ -230,9 +261,9 @@ export default function PersonalPlansPage() {
                     <td className="px-4 py-3 font-medium">
                       {t.last_name} {t.first_name} {t.middle_name ?? ""}
                     </td>
-                    <td className="px-4 py-3 text-surface-500">{plan?.position ?? t.lavozim ?? "—"}</td>
-                    <td className="px-4 py-3 text-surface-500">{plan?.stavka ?? t.stavka ?? "—"}</td>
-                    {WORK_TYPES.slice(0, 4).map(wt => (
+                    <td className="px-4 py-3 text-surface-500">{t.lavozim ?? plan?.position ?? "—"}</td>
+                    <td className="px-4 py-3 text-surface-500">{t.stavka ?? plan?.stavka ?? "—"}</td>
+                    {visibleWorkTypes.map(wt => (
                       <td key={wt} className="px-3 py-3 text-center text-surface-500">
                         {hrs?.[wt] ?? "—"}
                       </td>
@@ -244,7 +275,7 @@ export default function PersonalPlansPage() {
                           {WORK_PLAN_STATUS_LABELS[plan.status]}
                         </span>
                       ) : (
-                        <span className="text-xs text-surface-400">Reja yo'q</span>
+                        <span className="text-xs text-surface-400">Reja yo&apos;q</span>
                       )}
                     </td>
                   </tr>

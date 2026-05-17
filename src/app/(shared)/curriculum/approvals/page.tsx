@@ -175,13 +175,15 @@ export default function ApprovalsPage() {
         <div className="p-8 text-center text-surface-500">Yuklanmoqda...</div>
       ) : visiblePlans.length === 0 ? (
         <div className="p-8 text-center bg-white dark:bg-surface-800 rounded-lg border border-surface-200 dark:border-surface-700">
-          <p className="text-surface-500">Tasdiqlanishi kerak bo'lgan reja yo'q.</p>
+          <p className="text-surface-500">Tasdiqlanishi kerak bo&apos;lgan reja yo&apos;q.</p>
         </div>
       ) : (
         <div className="space-y-3">
           {visiblePlans.map(p => {
             const t = teacherById.get(p.teacher_id);
             const fullName = t ? `${t.last_name} ${t.first_name} ${t.middle_name ?? ""}`.trim() : "—";
+            const displayPosition = t?.lavozim ?? p.position ?? "—";
+            const displayStavka = t?.stavka ?? p.stavka ?? "—";
             const isExpanded = expandedPlanId === p.id;
             const planAllocs = allocsByPlan.get(p.id) ?? [];
             const total = planAllocs.reduce((s, a) => s + Number(a.hours), 0);
@@ -196,7 +198,7 @@ export default function ApprovalsPage() {
                   >
                     <div className="font-semibold text-surface-900 dark:text-surface-100">{fullName}</div>
                     <div className="text-xs text-surface-400 mt-0.5">
-                      {p.position ?? "—"} · {p.stavka ?? "—"} stavka · Jami: {total} soat
+                      {displayPosition} · {displayStavka} stavka · Jami: {total} soat
                       {p.submitted_at && ` · Yuborildi: ${new Date(p.submitted_at).toLocaleDateString("uz-UZ")}`}
                     </div>
                   </button>
@@ -223,7 +225,7 @@ export default function ApprovalsPage() {
                 {isExpanded && (
                   <div className="border-t border-surface-100 dark:border-surface-700 overflow-x-auto">
                     {planAllocs.length === 0 ? (
-                      <div className="p-4 text-sm text-center text-surface-400">Yuklama yo'q</div>
+                      <div className="p-4 text-sm text-center text-surface-400">Yuklama yo&apos;q</div>
                     ) : (
                       <>
                         {(["kuzgi", "bahorgi"] as const).map(sem => {

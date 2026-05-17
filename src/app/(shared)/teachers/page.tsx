@@ -1,9 +1,10 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { useSupabaseAuth } from "@/contexts/SupabaseAuthContext";
+import { cacheInvalidate } from "@/lib/curriculum-cache";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import type {
@@ -32,8 +33,10 @@ export default function TeachersPage() {
   const supabase = createClient();
   const { user } = useSupabaseAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
 
-  const canEdit = user?.role === "staff_manager";
+  const isStaffManager = user?.role === "staff_manager";
+  const canEdit = isStaffManager;
 
   const [rows, setRows] = useState<TeacherRow[]>([]);
   const [faculties, setFaculties] = useState<Faculty[]>([]);
@@ -43,8 +46,8 @@ export default function TeachersPage() {
 
   // Filters
   const [search, setSearch] = useState("");
-  const [filterFaculty, setFilterFaculty] = useState("");
-  const [filterDept, setFilterDept] = useState("");
+  const [filterFaculty, setFilterFaculty] = useState(() => searchParams.get("faculty") ?? "");
+  const [filterDept, setFilterDept] = useState(() => searchParams.get("department") ?? "");
   const [filterDaraja, setFilterDaraja] = useState("");
   const [filterUnvon, setFilterUnvon] = useState("");
   const [filterIshTuri, setFilterIshTuri] = useState("");
@@ -88,6 +91,11 @@ export default function TeachersPage() {
 
   useEffect(() => { load(); }, [load]);
 
+  useEffect(() => {
+    setFilterFaculty(searchParams.get("faculty") ?? "");
+    setFilterDept(searchParams.get("department") ?? "");
+  }, [searchParams]);
+
   // -------------------------------------------------------------------------
   const deptsByFaculty = useMemo(
     () => departments.filter((d) => !filterFaculty || d.faculty_id === filterFaculty),
@@ -99,22 +107,28 @@ export default function TeachersPage() {
     return rows.filter((r) => {
       const name = `${r.last_name} ${r.first_name} ${r.middle_name ?? ""}`.toLowerCase();
       if (q && !name.includes(q)) return false;
-      if (filterFaculty && r.faculty_id    !== filterFaculty) return false;
-      if (filterDept    && r.department_id !== filterDept)    return false;
+      if (isStaffManager && user?.department_id && r.department_id !== user.department_id) return false;
+      if (!isStaffManager && filterFaculty && r.faculty_id    !== filterFaculty) return false;
+      if (!isStaffManager && filterDept    && r.department_id !== filterDept)    return false;
       if (filterDaraja  && r.ilmiy_daraja  !== filterDaraja)  return false;
       if (filterUnvon   && r.ilmiy_unvon   !== filterUnvon)   return false;
       if (filterIshTuri && r.ish_turi      !== filterIshTuri) return false;
       if (filterHolati  && r.faoliyat_holati !== filterHolati) return false;
       return true;
     });
-  }, [rows, search, filterFaculty, filterDept, filterDaraja, filterUnvon, filterIshTuri, filterHolati]);
+  }, [rows, search, isStaffManager, user?.department_id, filterFaculty, filterDept, filterDaraja, filterUnvon, filterIshTuri, filterHolati]);
 
   // -------------------------------------------------------------------------
   async function remove(row: TeacherRow) {
     if (!confirm(`"${row.last_name} ${row.first_name}" o'qituvchisini o'chirishni tasdiqlaysizmi?`)) return;
     const { error: dbErr } = await supabase.from("teachers").delete().eq("id", row.id);
     if (dbErr) { alert(dbErr.message); return; }
+    if (user?.university_id) cacheInvalidate(user.university_id);
     load();
+  }
+
+  function openWorkPlan(teacherId: string) {
+    router.push(`/curriculum/personal-plans/${teacherId}`);
   }
 
   // -------------------------------------------------------------------------
@@ -280,9 +294,7 @@ export default function TeachersPage() {
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-surface-500">Stavka</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-surface-500">Ish turi</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-surface-500">Holat</th>
-                {canEdit && (
-                  <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-surface-500">Amallar</th>
-                )}
+                <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-surface-500">Amallar</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-surface-100 dark:divide-surface-700">
@@ -319,22 +331,31 @@ export default function TeachersPage() {
                       {FAOLIYAT_LABEL[r.faoliyat_holati]}
                     </span>
                   </td>
-                  {canEdit && (
-                    <td className="px-4 py-3 text-right">
-                      <div className="flex justify-end gap-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => router.push(`/teachers/${r.id}/edit`)}
-                        >
-                          Tahrirlash
-                        </Button>
-                        <Button size="sm" variant="danger" onClick={() => remove(r)}>
-                          O&apos;chirish
-                        </Button>
-                      </div>
-                    </td>
-                  )}
+                  <td className="px-4 py-3 text-right">
+                    <div className="flex justify-end gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => openWorkPlan(r.id)}
+                      >
+                        Ish reja
+                      </Button>
+                      {canEdit && (
+                        <>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => router.push(`/teachers/${r.id}/edit`)}
+                          >
+                            Tahrirlash
+                          </Button>
+                          <Button size="sm" variant="danger" onClick={() => remove(r)}>
+                            O&apos;chirish
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>

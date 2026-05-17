@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { useSupabaseAuth } from "@/contexts/SupabaseAuthContext";
+import { cacheInvalidate } from "@/lib/curriculum-cache";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import type { Faculty, Department } from "@/types/db";
@@ -160,36 +161,6 @@ function FieldError({ msg }: { msg?: string }) {
       </svg>
       {msg}
     </p>
-  );
-}
-
-function Field({
-  label, required, error, children,
-}: {
-  label: string; required?: boolean; error?: string; children: React.ReactNode;
-}) {
-  const hasError = !!error;
-  return (
-    <div>
-      <label className="mb-1.5 block text-sm font-medium text-surface-700 dark:text-surface-300">
-        {label}{required && <span className="ml-0.5 text-danger-500">*</span>}
-      </label>
-      <select
-        // cast — children is the <select> element via Sel below, but Field is
-        // also used standalone. We expose the error styling via CSS vars.
-        className={[
-          "w-full rounded-lg border px-3 py-2.5 text-sm shadow-sm transition-colors",
-          "focus:outline-none focus:ring-2",
-          hasError
-            ? "border-red-400 bg-red-50/30 focus:border-red-500 focus:ring-red-200 dark:border-red-500 dark:bg-red-900/10"
-            : "border-surface-300 bg-white focus:border-primary-500 focus:ring-primary-500/20 dark:border-surface-600 dark:bg-surface-800",
-          "text-surface-900 dark:text-surface-100",
-        ].join(" ")}
-        style={{ display: "none" }} // hidden — actual select rendered by children
-      />
-      {children}
-      <FieldError msg={error} />
-    </div>
   );
 }
 
@@ -365,6 +336,7 @@ export function TeacherForm({ mode, teacherId, initialValues }: Props) {
     setSaving(false);
 
     if (dbErr) { setServerError(dbErr.message); return; }
+    if (user?.university_id) cacheInvalidate(user.university_id);
     router.push("/teachers");
   }
 

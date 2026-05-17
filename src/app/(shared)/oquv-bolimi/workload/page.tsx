@@ -40,6 +40,7 @@ export default function OquvBolimiWorkloadPage() {
   const [allocations, setAllocations] = useState<TeacherAllocation[]>([]);
   const [years, setYears] = useState<AcademicYear[]>([]);
   const [filterYear, setFilterYear] = useState("");
+  const [filterFaculty, setFilterFaculty] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -48,7 +49,7 @@ export default function OquvBolimiWorkloadPage() {
 
     // Serve from cache if warm — no spinner flicker on back-navigation
     const cached = cacheGet(user.university_id);
-    if (cached) {
+    if (cached?.faculties.length) {
       setTeachers(cached.teachers);
       setDepartments(cached.departments);
       setFaculties(cached.faculties);
@@ -155,7 +156,7 @@ export default function OquvBolimiWorkloadPage() {
   }, [teachers]);
 
   const kafedraRows = useMemo(() => {
-    return departments.map(d => {
+    return departments.filter(d => !filterFaculty || d.faculty_id === filterFaculty).map(d => {
       const ts = teachersByDept.get(d.id) ?? [];
       const totals = {} as Record<WorkType, number>;
       let jami = 0, stavka = 0;
@@ -166,7 +167,7 @@ export default function OquvBolimiWorkloadPage() {
         if (plan) {
           withPlan++;
           statusCount[plan.status]++;
-          stavka += Number(plan.stavka ?? t.stavka ?? 0);
+          stavka += Number(t.stavka ?? plan.stavka ?? 0);
           const hrs = hoursByPlan.get(plan.id);
           if (hrs) for (const wt of ALL_WORK_TYPES) {
             const v = hrs[wt] ?? 0;
@@ -185,7 +186,7 @@ export default function OquvBolimiWorkloadPage() {
       const fa = a.faculty?.name ?? "", fb = b.faculty?.name ?? "";
       return fa !== fb ? fa.localeCompare(fb) : a.dept.name.localeCompare(b.dept.name);
     });
-  }, [departments, teachersByDept, facultyById, filterYear, planByTeacherYear, hoursByPlan]);
+  }, [departments, filterFaculty, teachersByDept, facultyById, filterYear, planByTeacherYear, hoursByPlan]);
 
   const handleKafedraClick = (deptId: string) => {
     router.push(`/curriculum/personal-plans?department=${deptId}`);
@@ -197,16 +198,32 @@ export default function OquvBolimiWorkloadPage() {
         <div>
           <h1 className="text-2xl font-bold text-surface-900 dark:text-surface-100">Kafedralar yuklamasi</h1>
           <p className="text-sm text-surface-500 dark:text-surface-400 mt-0.5">
-            Kafedra nomiga bosing — o'qituvchilar ro'yxatini ko'rish uchun
+            Kafedra nomiga bosing &mdash; o&apos;qituvchilar ro&apos;yxatini ko&apos;rish uchun
           </p>
         </div>
-        <select
-          value={filterYear}
-          onChange={e => setFilterYear(e.target.value)}
-          className="rounded-md border border-surface-300 dark:border-surface-600 bg-white dark:bg-surface-800 px-3 py-2 text-sm"
-        >
-          {years.map(y => <option key={y.id} value={y.id}>{y.name}{y.is_active ? " (faol)" : ""}</option>)}
-        </select>
+        <div className="flex flex-col sm:flex-row gap-2">
+          <select
+            value={filterFaculty}
+            onChange={e => setFilterFaculty(e.target.value)}
+            className="rounded-md border border-surface-300 dark:border-surface-600 bg-white dark:bg-surface-800 px-3 py-2 text-sm"
+            aria-label="Fakultet filtri"
+          >
+            <option value="">Barcha fakultetlar</option>
+            {faculties.map(f => (
+              <option key={f.id} value={f.id}>
+                {f.short_code ? `${f.short_code} - ${f.name}` : f.name}
+              </option>
+            ))}
+          </select>
+          <select
+            value={filterYear}
+            onChange={e => setFilterYear(e.target.value)}
+            className="rounded-md border border-surface-300 dark:border-surface-600 bg-white dark:bg-surface-800 px-3 py-2 text-sm"
+            aria-label="O'quv yili"
+          >
+            {years.map(y => <option key={y.id} value={y.id}>{y.name}{y.is_active ? " (faol)" : ""}</option>)}
+          </select>
+        </div>
       </div>
 
       {error && (
@@ -217,13 +234,15 @@ export default function OquvBolimiWorkloadPage() {
         {loading ? (
           <div className="p-8 text-center text-surface-500">Yuklanmoqda...</div>
         ) : kafedraRows.length === 0 ? (
-          <div className="p-8 text-center text-surface-500">Kafedra topilmadi.</div>
+          <div className="p-8 text-center text-surface-500">
+            {filterFaculty ? "Tanlangan fakultet bo'yicha kafedra topilmadi." : "Kafedra topilmadi."}
+          </div>
         ) : (
           <table className="w-full text-sm">
             <thead className="bg-surface-50 dark:bg-surface-900/50 border-b border-surface-200 dark:border-surface-700">
               <tr>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-surface-600 dark:text-surface-400 uppercase">Kafedra</th>
-                <th className="px-3 py-3 text-center text-xs font-semibold text-surface-600 dark:text-surface-400 uppercase">O'qit.</th>
+                <th className="px-3 py-3 text-center text-xs font-semibold text-surface-600 dark:text-surface-400 uppercase">O&apos;qit.</th>
                 <th className="px-3 py-3 text-center text-xs font-semibold text-surface-600 dark:text-surface-400 uppercase">Stavka</th>
                 {SUMMARY_WORK_TYPES.map(wt => (
                   <th key={wt} className="px-3 py-3 text-center text-xs font-semibold text-surface-600 dark:text-surface-400 uppercase whitespace-nowrap">
@@ -266,7 +285,7 @@ export default function OquvBolimiWorkloadPage() {
                           </span>
                         ) : null
                       )}
-                      {row.withPlan === 0 && <span className="text-xs text-surface-400">Reja yo'q</span>}
+                      {row.withPlan === 0 && <span className="text-xs text-surface-400">Reja yo&apos;q</span>}
                     </div>
                   </td>
                 </tr>
