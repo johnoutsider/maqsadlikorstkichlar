@@ -94,7 +94,7 @@ export default function TargetEditPage() {
             .from("indicators").select("*")
             .eq("university_id", user.university_id).order("order_idx");
           const list = (indData as Indicator[]) ?? [];
-          _cachedIndicators = { universityId: user.university_id, data: list };
+          _cachedIndicators = { universityId: user.university_id!, data: list };
           resolvedInds = list;
           setIndicators(list);
         })()
