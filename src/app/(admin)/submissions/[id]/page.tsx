@@ -332,8 +332,8 @@ export default function SubmissionDetailPage() {
               <th className="px-4 py-3 text-left text-xs font-semibold text-surface-600 uppercase w-16">№</th>
               <th className="px-4 py-3 text-left text-xs font-semibold text-surface-600 uppercase">Ko&apos;rsatkich</th>
               <th className="px-4 py-3 text-left text-xs font-semibold text-surface-600 uppercase w-20">Birlik</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-surface-600 uppercase w-24">Maqsad</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-surface-600 uppercase w-24">Qiymat</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-surface-600 uppercase w-24">Reja</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-surface-600 uppercase w-24">Amal</th>
               <th className="px-4 py-3 text-left text-xs font-semibold text-surface-600 uppercase w-20">Foiz</th>
               <th className="px-4 py-3 text-left text-xs font-semibold text-surface-600 uppercase">Fayllar</th>
               {canReview && (

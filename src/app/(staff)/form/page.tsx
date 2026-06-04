@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useSupabaseAuth } from "@/contexts/SupabaseAuthContext";
 import { Button } from "@/components/ui/Button";
@@ -34,14 +34,25 @@ function currentQuarter(): Quarter {
   return "Q4";
 }
 
+// ---------------------------------------------------------------------------
+// Module-level cache for indicators — static per university, never changes
+// during a session. Survives route navigations.
+// ---------------------------------------------------------------------------
+let _cachedIndicators: { universityId: string; data: Indicator[] } | null = null;
+
 export default function FormPage() {
-  const supabase = createClient();
+  // Stable Supabase client — never recreated on re-renders
+  const supabaseRef = useRef(createClient());
+  const supabase = supabaseRef.current;
+
   const { user } = useSupabaseAuth();
 
   const [year, setYear] = useState<number>(new Date().getFullYear());
   const [quarter, setQuarter] = useState<Quarter>(currentQuarter());
   const [periodInit, setPeriodInit] = useState(false);
-  const [indicators, setIndicators] = useState<Indicator[]>([]);
+  const [indicators, setIndicators] = useState<Indicator[]>(
+    _cachedIndicators?.universityId === user?.university_id ? _cachedIndicators.data : []
+  );
   const [submission, setSubmission] = useState<Submission | null>(null);
   const [target, setTarget] = useState<import("@/types/db").Target | null>(null);
   const [values, setValues] = useState<Record<string, string>>({});
@@ -55,15 +66,22 @@ export default function FormPage() {
 
   useEffect(() => {
     if (!user?.university_id) return;
+    // Use cache if it's for the same university
+    if (_cachedIndicators?.universityId === user.university_id) {
+      setIndicators(_cachedIndicators.data);
+      return;
+    }
     (async () => {
       const { data } = await supabase
         .from("indicators")
         .select("*")
         .eq("university_id", user.university_id)
         .order("order_idx");
-      setIndicators((data as Indicator[]) ?? []);
+      const list = (data as Indicator[]) ?? [];
+      _cachedIndicators = { universityId: user.university_id, data: list };
+      setIndicators(list);
     })();
-  }, [supabase, user?.university_id]);
+  }, [user?.university_id]); // supabase is stable (useRef)
 
   // On first load, if the staff has a submission needing attention
   // (needs_revision > rejected > any most recent), jump to that period
@@ -87,7 +105,7 @@ export default function FormPage() {
       }
       setPeriodInit(true);
     })();
-  }, [supabase, user?.department_id, periodInit]);
+  }, [user?.department_id, periodInit]); // supabase is stable (useRef)
 
   const load = useCallback(async () => {
     if (!user?.department_id) return;
@@ -148,7 +166,7 @@ export default function FormPage() {
     setValues(v);
     setFiles(f);
     setLoading(false);
-  }, [supabase, user?.department_id, year, quarter, indicators]);
+  }, [user?.department_id, year, quarter, indicators]); // supabase is stable (useRef)
 
   useEffect(() => {
     if (indicators.length > 0) load();
@@ -360,7 +378,7 @@ export default function FormPage() {
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
           </svg>
           <span>
-            <strong>{year} {quarter}</strong> uchun maqsadlar hali belgilanmagan.
+            <strong>{year} {quarter}</strong> uchun rejalar hali belgilanmagan.
           </span>
         </div>
       )}
@@ -393,8 +411,8 @@ export default function FormPage() {
                 <th className="px-4 py-3 text-left text-xs font-semibold text-surface-600 uppercase w-16">№</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-surface-600 uppercase">Ko&apos;rsatkich</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-surface-600 uppercase w-24">Birlik</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-surface-600 uppercase w-24">Maqsad</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-surface-600 uppercase w-32">Bajarilish</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-surface-600 uppercase w-24">Reja</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-surface-600 uppercase w-32">Amal</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-surface-600 uppercase w-20">Foizi</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-surface-600 uppercase">Tasdiqlovchi fayllar</th>
               </tr>

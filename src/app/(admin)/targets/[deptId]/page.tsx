@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import Link from "next/link";
 import { useParams, useSearchParams, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
@@ -10,11 +10,21 @@ import type { Department, Faculty, Indicator, Target, Quarter } from "@/types/db
 
 const CAN_EDIT_ROLES = new Set(["university_admin", "science_department"]);
 
+// ---------------------------------------------------------------------------
+// Module-level caches — static data that never changes during a session
+// ---------------------------------------------------------------------------
+let _cachedIndicators: { universityId: string; data: Indicator[] } | null = null;
+const _cachedDepts = new Map<string, { dept: Department; faculty: Faculty | null }>();
+
 export default function TargetEditPage() {
   const { deptId } = useParams<{ deptId: string }>();
   const searchParams = useSearchParams();
   const router = useRouter();
-  const supabase = createClient();
+
+  // Stable Supabase client — never recreated on re-renders
+  const supabaseRef = useRef(createClient());
+  const supabase = supabaseRef.current;
+
   const { user } = useSupabaseAuth();
 
   const canEdit = !!user && CAN_EDIT_ROLES.has(user.role);
@@ -25,12 +35,16 @@ export default function TargetEditPage() {
 
   const QUARTERS: Quarter[] = ["Q1", "Q2", "Q3", "Q4"];
 
-  const [department, setDepartment] = useState<Department | null>(null);
-  const [faculty, setFaculty] = useState<Faculty | null>(null);
-  const [indicators, setIndicators] = useState<Indicator[]>([]);
+  const deptCache = deptId ? _cachedDepts.get(deptId) : undefined;
+  const indCache  = _cachedIndicators?.universityId === user?.university_id ? _cachedIndicators.data : null;
+
+  const [department, setDepartment] = useState<Department | null>(deptCache?.dept ?? null);
+  const [faculty, setFaculty] = useState<Faculty | null>(deptCache?.faculty ?? null);
+  const [indicators, setIndicators] = useState<Indicator[]>(indCache ?? []);
   const [values, setValues] = useState<Record<string, string>>({});
   const [initialValues, setInitialValues] = useState<Record<string, string>>({});
-  const [loading, setLoading] = useState(true);
+  // Only show loading spinner if we don't have static data cached yet
+  const [loading, setLoading] = useState(!deptCache || !indCache);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -39,30 +53,64 @@ export default function TargetEditPage() {
 
   const load = useCallback(async () => {
     if (!deptId || !user?.university_id) return;
-    setLoading(true);
     setError("");
     setMessage("");
 
-    const [deptRes, indRes, tgtRes] = await Promise.all([
-      supabase.from("departments").select("*").eq("id", deptId).maybeSingle(),
-      supabase.from("indicators").select("*").eq("university_id", user.university_id).order("order_idx"),
-      supabase.from("targets").select("*").eq("department_id", deptId).eq("year", year).eq("quarter", quarter).maybeSingle(),
-    ]);
+    // ── Static data: dept, faculty, indicators ──────────────────────────────
+    // Fetch only what's not already cached; run in parallel with target fetch.
+    const needsDept = !_cachedDepts.has(deptId);
+    const needsInds = _cachedIndicators?.universityId !== user.university_id;
 
-    if (deptRes.error) { setError(deptRes.error.message); setLoading(false); return; }
-    const dept = deptRes.data as Department | null;
-    setDepartment(dept);
+    if (needsDept || needsInds) setLoading(true);
 
-    // Load faculty info
-    if (dept?.faculty_id) {
-      const { data: fac } = await supabase.from("faculties").select("*").eq("id", dept.faculty_id).maybeSingle();
-      setFaculty((fac as Faculty) ?? null);
+    const fetches: Promise<void>[] = [];
+
+    let resolvedInds: Indicator[] = _cachedIndicators?.data ?? indicators;
+
+    if (needsDept) {
+      fetches.push(
+        (async () => {
+          const { data: deptData, error: deptErr } = await supabase
+            .from("departments").select("*").eq("id", deptId).maybeSingle();
+          if (deptErr) { setError(deptErr.message); return; }
+          const dept = deptData as Department | null;
+          let fac: Faculty | null = null;
+          if (dept?.faculty_id) {
+            const { data: facData } = await supabase
+              .from("faculties").select("*").eq("id", dept.faculty_id).maybeSingle();
+            fac = (facData as Faculty) ?? null;
+          }
+          _cachedDepts.set(deptId, { dept: dept!, faculty: fac });
+          setDepartment(dept);
+          setFaculty(fac);
+        })()
+      );
     }
 
-    const inds = (indRes.data as Indicator[]) ?? [];
-    setIndicators(inds);
+    if (needsInds) {
+      fetches.push(
+        (async () => {
+          const { data: indData } = await supabase
+            .from("indicators").select("*")
+            .eq("university_id", user.university_id).order("order_idx");
+          const list = (indData as Indicator[]) ?? [];
+          _cachedIndicators = { universityId: user.university_id, data: list };
+          resolvedInds = list;
+          setIndicators(list);
+        })()
+      );
+    }
+
+    // ── Dynamic data: target values (always fresh) ──────────────────────────
+    const tgtPromise = supabase
+      .from("targets").select("*")
+      .eq("department_id", deptId).eq("year", year).eq("quarter", quarter)
+      .maybeSingle();
+
+    const [, tgtRes] = await Promise.all([Promise.all(fetches), tgtPromise]);
 
     const tgt = tgtRes.data as Target | null;
+    const inds = resolvedInds.length ? resolvedInds : (_cachedIndicators?.data ?? []);
     const v: Record<string, string> = {};
     inds.forEach((ind) => {
       const x = tgt?.values?.[ind.id];
@@ -71,7 +119,7 @@ export default function TargetEditPage() {
     setValues(v);
     setInitialValues(v);
     setLoading(false);
-  }, [supabase, deptId, user?.university_id, year, quarter]);
+  }, [deptId, user?.university_id, year, quarter]); // supabase is stable (useRef)
 
   useEffect(() => { load(); }, [load]);
 
@@ -113,7 +161,7 @@ export default function TargetEditPage() {
     setSaving(false);
     if (e) { setError(e.message); return false; }
     setInitialValues(values);
-    setMessage("Maqsadlar saqlandi.");
+    setMessage("Rejalar saqlandi.");
     return true;
   };
 
@@ -139,7 +187,7 @@ export default function TargetEditPage() {
       <div className="p-8 text-center">
         <p className="text-danger-600 text-sm">{error || "Kafedra topilmadi."}</p>
         <Link href="/targets" className="text-primary-600 hover:underline text-sm mt-4 inline-block">
-          ← Maqsadlar
+          ← Rejalar
         </Link>
       </div>
     );
@@ -156,7 +204,7 @@ export default function TargetEditPage() {
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
           </svg>
-          Maqsadlar ro&apos;yxatiga qaytish
+          Rejalar ro&apos;yxatiga qaytish
         </Link>
 
         <div className="flex items-start justify-between gap-4 flex-wrap">
@@ -244,7 +292,7 @@ export default function TargetEditPage() {
                     <th className="px-5 py-3 text-left text-xs font-semibold text-surface-600 dark:text-surface-400 uppercase w-14">№</th>
                     <th className="px-5 py-3 text-left text-xs font-semibold text-surface-600 dark:text-surface-400 uppercase">Ko&apos;rsatkich</th>
                     <th className="px-5 py-3 text-left text-xs font-semibold text-surface-600 dark:text-surface-400 uppercase w-24">Birlik</th>
-                    <th className="px-5 py-3 text-left text-xs font-semibold text-surface-600 dark:text-surface-400 uppercase w-40">Maqsad</th>
+                    <th className="px-5 py-3 text-left text-xs font-semibold text-surface-600 dark:text-surface-400 uppercase w-40">Reja</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-surface-200 dark:divide-surface-700">

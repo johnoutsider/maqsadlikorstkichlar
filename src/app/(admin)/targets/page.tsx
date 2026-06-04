@@ -100,9 +100,9 @@ export default function TargetsPage() {
   return (
     <div>
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-surface-900 dark:text-surface-100">Maqsadlar (KPI)</h1>
+        <h1 className="text-2xl font-bold text-surface-900 dark:text-surface-100">Rejalar (KPI)</h1>
         <p className="text-sm text-surface-500 dark:text-surface-400 mt-1">
-          Har bir kafedra uchun chorakli KPI maqsadlarini belgilang.
+          Har bir kafedra uchun chorakli KPI rejalarini belgilang.
         </p>
       </div>
 

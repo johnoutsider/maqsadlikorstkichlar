@@ -23,7 +23,7 @@ const BREADCRUMB_LABELS: Record<string, string> = {
   faculties: "Fakultetlar",
   departments: "Kafedralar",
   indicators: "Ko'rsatkichlar",
-  targets: "Maqsadlar",
+  targets: "Rejalar",
   submissions: "Hisobotlar",
   form: "Hisobot Formasi",
   "my-submissions": "Mening Hisobotlarim",

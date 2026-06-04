@@ -82,7 +82,7 @@ const NAV: NavItem[] = [
       },
       {
         href: "/targets",
-        label: "Ilmiy maqsadlar",
+        label: "Ilmiy rejalar",
         roles: ["university_admin", "science_department", "vice_rector", "dean"],
       },
       {
@@ -92,18 +92,19 @@ const NAV: NavItem[] = [
       },
     ],
   },
-  {
-    label: "O'quv jarayoni",
-    icon: <Icon d="M12 14l9-5-9-5-9 5 9 5zm0 7v-7m-7 2l7 5 7-5" />,
-    roles: ["dean", "staff_manager"],
-    children: [
-      { href: "/curriculum/subjects",          label: "Fanlar",           roles: ["dean"] },
-      { href: "/curriculum/groups",            label: "Guruhlar",         roles: ["dean"] },
-      { href: "/curriculum/subject-workload",  label: "Fan yuklamasi",    roles: ["dean"] },
-      { href: "/curriculum/personal-plans",    label: "Shaxsiy ish reja", roles: ["staff_manager", "dean"] },
-      { href: "/curriculum/approvals",         label: "Tasdiqlash",       roles: ["dean"] },
-    ],
-  },
+  // O'quv jarayoni — temporarily hidden
+  // {
+  //   label: "O'quv jarayoni",
+  //   icon: <Icon d="M12 14l9-5-9-5-9 5 9 5zm0 7v-7m-7 2l7 5 7-5" />,
+  //   roles: ["dean", "staff_manager"],
+  //   children: [
+  //     { href: "/curriculum/subjects",          label: "Fanlar",           roles: ["dean"] },
+  //     { href: "/curriculum/groups",            label: "Guruhlar",         roles: ["dean"] },
+  //     { href: "/curriculum/subject-workload",  label: "Fan yuklamasi",    roles: ["dean"] },
+  //     { href: "/curriculum/personal-plans",    label: "Shaxsiy ish reja", roles: ["staff_manager", "dean"] },
+  //     { href: "/curriculum/approvals",         label: "Tasdiqlash",       roles: ["dean"] },
+  //   ],
+  // },
   {
     label: "O'quv bo'limi",
     icon: <Icon d="M3 7l9-4 9 4-9 4-9-4zm0 6l9 4 9-4M3 17l9 4 9-4" />,

@@ -395,7 +395,7 @@ export default function OverviewPage() {
                 <Tooltip
                   formatter={(value, name) => [
                     `${Number(value ?? 0)}%`,
-                    name === "target" ? "Maqsad" : "Bajarilgan",
+                    name === "target" ? "Reja" : "Bajarilgan",
                   ]}
                   cursor={{ fill: "rgba(0,0,0,0.05)" }}
                 />
@@ -433,7 +433,7 @@ export default function OverviewPage() {
           {/* Legend */}
           <div className="flex gap-4 mt-4 text-xs text-surface-500 flex-wrap">
             <span className="flex items-center gap-1">
-              <span className="inline-block w-3 h-3 rounded-sm bg-yellow-400" /> Maqsad (100%)
+              <span className="inline-block w-3 h-3 rounded-sm bg-yellow-400" /> Reja (100%)
             </span>
             <span className="flex items-center gap-1">
               <span className="inline-block w-3 h-3 rounded-sm bg-green-500" /> Bajarilgan (≥100%)

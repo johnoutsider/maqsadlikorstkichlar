@@ -30,8 +30,18 @@ interface TeacherRow extends Teacher {
   department_name: string;
 }
 
+// ---------------------------------------------------------------------------
+// Module-level cache — survives route navigations within the same session
+// ---------------------------------------------------------------------------
+let _cachedRows: TeacherRow[] | null = null;
+let _cachedFaculties: Faculty[] | null = null;
+let _cachedDepartments: Department[] | null = null;
+
 export default function TeachersPage() {
-  const supabase = createClient();
+  // Stable Supabase client — never recreated on re-renders
+  const supabaseRef = useRef(createClient());
+  const supabase = supabaseRef.current;
+
   const { user } = useSupabaseAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -40,10 +50,10 @@ export default function TeachersPage() {
   const canEdit = isStaffManager;
   const canImport = user?.role === "university_admin" || user?.role === "super_admin";
 
-  const [rows, setRows] = useState<TeacherRow[]>([]);
-  const [faculties, setFaculties] = useState<Faculty[]>([]);
-  const [departments, setDepartments] = useState<Department[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [rows, setRows] = useState<TeacherRow[]>(_cachedRows ?? []);
+  const [faculties, setFaculties] = useState<Faculty[]>(_cachedFaculties ?? []);
+  const [departments, setDepartments] = useState<Department[]>(_cachedDepartments ?? []);
+  const [loading, setLoading] = useState(_cachedRows === null);
   const [error, setError] = useState("");
 
   // Bulk import
@@ -63,9 +73,22 @@ export default function TeachersPage() {
   const [filterIshTuri, setFilterIshTuri] = useState("");
   const [filterHolati, setFilterHolati] = useState("");
 
+  // Pagination
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState<50 | 100>(50);
+
   // -------------------------------------------------------------------------
-  const load = useCallback(async () => {
+  const load = useCallback(async (force = false) => {
     if (!user) return;
+    // Use cache if available and not forced
+    if (!force && _cachedRows !== null) {
+      setRows(_cachedRows);
+      setFaculties(_cachedFaculties ?? []);
+      setDepartments(_cachedDepartments ?? []);
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     setError("");
 
@@ -76,8 +99,6 @@ export default function TeachersPage() {
 
     const facs = (tf.data as Faculty[]) ?? [];
     const deps = (td.data as Department[]) ?? [];
-    setFaculties(facs);
-    setDepartments(deps);
 
     const facMap = new Map(facs.map((f) => [f.id, f.name]));
     const deptMap = new Map(deps.map((d) => [d.id, d.name]));
@@ -89,15 +110,22 @@ export default function TeachersPage() {
 
     if (dbErr) { setError(dbErr.message); setLoading(false); return; }
 
-    setRows(
-      ((data as Teacher[]) ?? []).map((t) => ({
-        ...t,
-        faculty_name:    facMap.get(t.faculty_id)    ?? "",
-        department_name: deptMap.get(t.department_id) ?? "",
-      }))
-    );
+    const mapped: TeacherRow[] = ((data as Teacher[]) ?? []).map((t) => ({
+      ...t,
+      faculty_name:    facMap.get(t.faculty_id)    ?? "",
+      department_name: deptMap.get(t.department_id) ?? "",
+    }));
+
+    // Save to module-level cache
+    _cachedRows        = mapped;
+    _cachedFaculties   = facs;
+    _cachedDepartments = deps;
+
+    setRows(mapped);
+    setFaculties(facs);
+    setDepartments(deps);
     setLoading(false);
-  }, [supabase, user]);
+  }, [user]); // supabase is stable (useRef) — no need to list it
 
   useEffect(() => { load(); }, [load]);
 
@@ -105,6 +133,9 @@ export default function TeachersPage() {
     setFilterFaculty(searchParams.get("faculty") ?? "");
     setFilterDept(searchParams.get("department") ?? "");
   }, [searchParams]);
+
+  // Reset to page 1 whenever any filter changes
+  useEffect(() => { setPage(1); }, [search, filterFaculty, filterDept, filterDaraja, filterUnvon, filterIshTuri, filterHolati, pageSize]);
 
   // -------------------------------------------------------------------------
   const deptsByFaculty = useMemo(
@@ -128,13 +159,18 @@ export default function TeachersPage() {
     });
   }, [rows, search, isStaffManager, user?.department_id, filterFaculty, filterDept, filterDaraja, filterUnvon, filterIshTuri, filterHolati]);
 
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const paginated  = filtered.slice((page - 1) * pageSize, page * pageSize);
+
   // -------------------------------------------------------------------------
   async function remove(row: TeacherRow) {
     if (!confirm(`"${row.last_name} ${row.first_name}" o'qituvchisini o'chirishni tasdiqlaysizmi?`)) return;
     const { error: dbErr } = await supabase.from("teachers").delete().eq("id", row.id);
     if (dbErr) { alert(dbErr.message); return; }
     if (user?.university_id) cacheInvalidate(user.university_id);
-    load();
+    // Invalidate module cache then reload
+    _cachedRows = null;
+    load(true);
   }
 
   function openWorkPlan(teacherId: string) {
@@ -163,7 +199,9 @@ export default function TeachersPage() {
     setBulkResults(data.results ?? []);
     setBulkSummary({ succeeded: data.succeeded ?? 0, updated: data.updated ?? 0, failed: data.failed ?? 0 });
     setBulkResultOpen(true);
-    load();
+    // Invalidate module cache then reload
+    _cachedRows = null;
+    load(true);
   }
 
   // -------------------------------------------------------------------------
@@ -217,7 +255,9 @@ export default function TeachersPage() {
             O&apos;qituvchilar ro&apos;yxati
           </h1>
           <p className="mt-1 text-sm text-surface-500 dark:text-surface-400">
-            {loading ? "Yuklanmoqda…" : `Jami: ${filtered.length} ta o'qituvchi`}
+            {loading
+              ? "Yuklanmoqda…"
+              : `Jami: ${filtered.length} ta o'qituvchi${filtered.length !== rows.length ? ` (filtr: ${rows.length} tadan)` : ""}`}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -355,9 +395,9 @@ export default function TeachersPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-surface-100 dark:divide-surface-700">
-              {filtered.map((r, idx) => (
+              {paginated.map((r, idx) => (
                 <tr key={r.id} className="hover:bg-surface-50 dark:hover:bg-surface-900/30 transition-colors">
-                  <td className="px-4 py-3 text-sm text-surface-400">{idx + 1}</td>
+                  <td className="px-4 py-3 text-sm text-surface-400">{(page - 1) * pageSize + idx + 1}</td>
                   <td className="px-4 py-3">
                     <p className="text-sm font-medium text-surface-900 dark:text-surface-100">
                       {r.last_name} {r.first_name}{r.middle_name ? ` ${r.middle_name}` : ""}
@@ -419,6 +459,98 @@ export default function TeachersPage() {
           </table>
         )}
       </div>
+
+      {/* Pagination */}
+      {!loading && filtered.length > 0 && (
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+          {/* Left: page size + info */}
+          <div className="flex items-center gap-3 text-sm text-surface-500 dark:text-surface-400">
+            <span>Sahifada:</span>
+            <div className="flex rounded-lg border border-surface-300 dark:border-surface-600 overflow-hidden">
+              {([50, 100] as const).map((size) => (
+                <button
+                  key={size}
+                  onClick={() => setPageSize(size)}
+                  className={`px-3 py-1.5 text-sm font-medium transition-colors ${
+                    pageSize === size
+                      ? "bg-primary-600 text-white"
+                      : "bg-white dark:bg-surface-800 text-surface-700 dark:text-surface-300 hover:bg-surface-50 dark:hover:bg-surface-700"
+                  }`}
+                >
+                  {size}
+                </button>
+              ))}
+            </div>
+            <span>
+              {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, filtered.length)} / {filtered.length} ta
+            </span>
+          </div>
+
+          {/* Right: page navigation */}
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setPage(1)}
+              disabled={page === 1}
+              className="rounded-lg px-2 py-1.5 text-sm text-surface-600 dark:text-surface-300 hover:bg-surface-100 dark:hover:bg-surface-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              title="Birinchi sahifa"
+            >
+              «
+            </button>
+            <button
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page === 1}
+              className="rounded-lg px-2 py-1.5 text-sm text-surface-600 dark:text-surface-300 hover:bg-surface-100 dark:hover:bg-surface-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              title="Oldingi sahifa"
+            >
+              ‹
+            </button>
+
+            {/* Page number pills */}
+            {Array.from({ length: totalPages }, (_, i) => i + 1)
+              .filter((p) => p === 1 || p === totalPages || Math.abs(p - page) <= 2)
+              .reduce<(number | "…")[]>((acc, p, i, arr) => {
+                if (i > 0 && (p as number) - (arr[i - 1] as number) > 1) acc.push("…");
+                acc.push(p);
+                return acc;
+              }, [])
+              .map((item, i) =>
+                item === "…" ? (
+                  <span key={`ellipsis-${i}`} className="px-2 py-1.5 text-sm text-surface-400">…</span>
+                ) : (
+                  <button
+                    key={item}
+                    onClick={() => setPage(item as number)}
+                    className={`min-w-[2rem] rounded-lg px-2 py-1.5 text-sm font-medium transition-colors ${
+                      page === item
+                        ? "bg-primary-600 text-white"
+                        : "text-surface-600 dark:text-surface-300 hover:bg-surface-100 dark:hover:bg-surface-700"
+                    }`}
+                  >
+                    {item}
+                  </button>
+                )
+              )}
+
+            <button
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={page === totalPages}
+              className="rounded-lg px-2 py-1.5 text-sm text-surface-600 dark:text-surface-300 hover:bg-surface-100 dark:hover:bg-surface-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              title="Keyingi sahifa"
+            >
+              ›
+            </button>
+            <button
+              onClick={() => setPage(totalPages)}
+              disabled={page === totalPages}
+              className="rounded-lg px-2 py-1.5 text-sm text-surface-600 dark:text-surface-300 hover:bg-surface-100 dark:hover:bg-surface-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              title="Oxirgi sahifa"
+            >
+              »
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Bulk import results modal */}
       <Modal isOpen={bulkResultOpen} onClose={() => setBulkResultOpen(false)} title="Excel import natijalari">
         <div className="space-y-4">
