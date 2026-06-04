@@ -36,7 +36,7 @@ export default function TargetEditPage() {
   const QUARTERS: Quarter[] = ["Q1", "Q2", "Q3", "Q4"];
 
   const deptCache = deptId ? _cachedDepts.get(deptId) : undefined;
-  const indCache  = _cachedIndicators?.universityId === user?.university_id ? _cachedIndicators.data : null;
+  const indCache  = (_cachedIndicators !== null && _cachedIndicators.universityId === user?.university_id) ? _cachedIndicators.data : null;
 
   const [department, setDepartment] = useState<Department | null>(deptCache?.dept ?? null);
   const [faculty, setFaculty] = useState<Faculty | null>(deptCache?.faculty ?? null);
