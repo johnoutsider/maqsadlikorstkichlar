@@ -125,7 +125,7 @@ export default function TeachersPage() {
     setFaculties(facs);
     setDepartments(deps);
     setLoading(false);
-  }, [user]); // supabase is stable (useRef) — no need to list it
+  }, [user, supabase]);
 
   useEffect(() => { load(); }, [load]);
 

@@ -81,7 +81,7 @@ export default function FormPage() {
       _cachedIndicators = { universityId: user.university_id, data: list };
       setIndicators(list);
     })();
-  }, [user?.university_id]); // supabase is stable (useRef)
+  }, [user?.university_id, supabase]);
 
   // On first load, if the staff has a submission needing attention
   // (needs_revision > rejected > any most recent), jump to that period
@@ -105,7 +105,7 @@ export default function FormPage() {
       }
       setPeriodInit(true);
     })();
-  }, [user?.department_id, periodInit]); // supabase is stable (useRef)
+  }, [user?.department_id, periodInit, supabase]);
 
   const load = useCallback(async () => {
     if (!user?.department_id) return;
@@ -166,7 +166,7 @@ export default function FormPage() {
     setValues(v);
     setFiles(f);
     setLoading(false);
-  }, [user?.department_id, year, quarter, indicators]); // supabase is stable (useRef)
+  }, [user?.department_id, year, quarter, indicators, supabase]);
 
   useEffect(() => {
     if (indicators.length > 0) load();

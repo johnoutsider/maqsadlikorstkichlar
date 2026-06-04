@@ -119,7 +119,7 @@ export default function TargetEditPage() {
     setValues(v);
     setInitialValues(v);
     setLoading(false);
-  }, [deptId, user?.university_id, year, quarter]); // supabase is stable (useRef)
+  }, [deptId, user?.university_id, year, quarter, supabase]);
 
   useEffect(() => { load(); }, [load]);
 
