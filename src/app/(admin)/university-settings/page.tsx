@@ -7,6 +7,11 @@ import { useSupabaseAuth } from "@/contexts/SupabaseAuthContext";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
+import {
+  IMAGE_FILE_RULE,
+  acceptAttribute,
+  validateFile,
+} from "@/lib/upload-validation";
 import type { AcademicYear, University } from "@/types/db";
 
 export default function UniversitySettingsPage() {
@@ -200,6 +205,9 @@ export default function UniversitySettingsPage() {
     setMessage("");
 
     try {
+      const validationError = validateFile(file, IMAGE_FILE_RULE);
+      if (validationError) throw new Error(validationError);
+
       const extension = file.name.split(".").pop()?.toLowerCase() || "png";
       const path = `${university.id}/logo.${extension}`;
 
@@ -248,6 +256,9 @@ export default function UniversitySettingsPage() {
     setMessage("");
 
     try {
+      const validationError = validateFile(file, IMAGE_FILE_RULE);
+      if (validationError) throw new Error(validationError);
+
       const extension = file.name.split(".").pop()?.toLowerCase() || "png";
       const path = `${university.id}/login-logo.${extension}`;
 
@@ -324,7 +335,7 @@ export default function UniversitySettingsPage() {
             <label className="group flex h-32 w-32 cursor-pointer items-center justify-center overflow-hidden rounded-lg border border-dashed border-surface-300 bg-surface-50 text-surface-500 transition hover:bg-surface-100 dark:border-surface-600 dark:bg-surface-900/40 dark:text-surface-400 dark:hover:bg-surface-900">
               <input
                 type="file"
-                accept="image/png,image/jpeg,image/webp"
+                accept={acceptAttribute(IMAGE_FILE_RULE)}
                 className="hidden"
                 onChange={(e) => uploadLogo(e.target.files?.[0] ?? null)}
               />
@@ -353,7 +364,7 @@ export default function UniversitySettingsPage() {
             <label className="group flex h-32 w-32 cursor-pointer items-center justify-center overflow-hidden rounded-lg border border-dashed border-surface-300 bg-surface-50 text-surface-500 transition hover:bg-surface-100 dark:border-surface-600 dark:bg-surface-900/40 dark:text-surface-400 dark:hover:bg-surface-900">
               <input
                 type="file"
-                accept="image/png,image/jpeg,image/webp"
+                accept={acceptAttribute(IMAGE_FILE_RULE)}
                 className="hidden"
                 onChange={(e) => uploadLoginLogo(e.target.files?.[0] ?? null)}
               />

@@ -184,7 +184,7 @@ export default function MonitoringPage() {
   const handleExportExcel = async () => {
     if (visibleDepartments.length === 0 || indicators.length === 0) return;
 
-    const XLSX = await import("xlsx");
+    const ExcelJS = await import("exceljs");
     const headerTop = ["Kafedra"];
     const headerBottom = [""];
 
@@ -217,22 +217,35 @@ export default function MonitoringPage() {
       return row;
     });
 
-    const worksheet = XLSX.utils.aoa_to_sheet([headerTop, headerBottom, ...rows]);
-    worksheet["!merges"] = [
-      { s: { r: 0, c: 0 }, e: { r: 1, c: 0 } },
-      ...indicators.map((_, index) => {
-        const startColumn = 1 + index * 3;
-        return { s: { r: 0, c: startColumn }, e: { r: 0, c: startColumn + 2 } };
-      }),
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet("Monitoring");
+    worksheet.addRows([headerTop, headerBottom, ...rows]);
+    worksheet.mergeCells(1, 1, 2, 1);
+    indicators.forEach((_, index) => {
+      const startColumn = 2 + index * 3;
+      worksheet.mergeCells(1, startColumn, 1, startColumn + 2);
+    });
+    worksheet.columns = [
+      { width: 36 },
+      ...indicators.flatMap(() => [{ width: 12 }, { width: 12 }, { width: 12 }]),
     ];
-    worksheet["!cols"] = [
-      { wch: 36 },
-      ...indicators.flatMap(() => [{ wch: 12 }, { wch: 12 }, { wch: 12 }]),
-    ];
+    worksheet.getRows(1, 2)?.forEach((row) => {
+      row.font = { bold: true };
+      row.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
+    });
 
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Monitoring");
-    XLSX.writeFile(workbook, `monitoring-${year}-${quarter}.xlsx`);
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `monitoring-${year}-${quarter}.xlsx`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
   };
 
   const cellValueClass = (actual: number | null, target: number | null) => {

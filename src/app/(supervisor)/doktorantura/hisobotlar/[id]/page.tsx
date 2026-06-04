@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
+import { useParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/Button";
 import { useSupabaseAuth } from "@/contexts/SupabaseAuthContext";
@@ -43,8 +44,9 @@ async function resolveAttachments(
   return resolved.filter((item) => !!item.url);
 }
 
-export default function SupervisorReportsPage({ params }: { params: { id: string } }) {
+export default function SupervisorReportsPage() {
   const supabase = createClient();
+  const params = useParams<{ id: string }>();
   const { user } = useSupabaseAuth();
   const [studentName, setStudentName] = useState("");
   const [reports, setReports] = useState<ReportRow[]>([]);

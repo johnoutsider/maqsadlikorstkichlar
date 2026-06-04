@@ -39,7 +39,7 @@ export async function POST(req: Request) {
   if (password.length < 8) return bad("Password must be at least 8 characters");
 
   // 1. Identify caller via session cookies
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user: authUser },
   } = await supabase.auth.getUser();
@@ -169,7 +169,7 @@ export async function DELETE(req: Request) {
   const targetId = searchParams.get("id");
   if (!targetId) return bad("id query param required");
 
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user: authUser },
   } = await supabase.auth.getUser();

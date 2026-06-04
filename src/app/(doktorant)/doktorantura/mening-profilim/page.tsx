@@ -13,6 +13,11 @@ import {
   type DoktorantFormState,
   type DoktorantMetadata,
 } from "@/lib/doktorant-profile";
+import {
+  IMAGE_FILE_RULE,
+  acceptAttribute,
+  validateFile,
+} from "@/lib/upload-validation";
 
 type SupervisorRecord = {
   full_name?: string;
@@ -304,6 +309,9 @@ export default function MyProfilePage() {
     setMessage("");
 
     try {
+      const validationError = validateFile(file, IMAGE_FILE_RULE);
+      if (validationError) throw new Error(validationError);
+
       const extension = file.name.split(".").pop()?.toLowerCase() || "jpg";
       const filePath = `${doktorant.id}/avatar.${extension}`;
       const metadata = (doktorant.metadata ?? {}) as DoktorantMetadata;
@@ -398,7 +406,7 @@ export default function MyProfilePage() {
                 <label className="mt-4 inline-flex cursor-pointer items-center justify-center rounded-full bg-[var(--primary)] px-4 py-2 text-xs font-bold text-white shadow-[0_12px_28px_rgba(31,50,82,0.18)]">
                   <input
                     type="file"
-                    accept="image/png,image/jpeg,image/webp"
+                    accept={acceptAttribute(IMAGE_FILE_RULE)}
                     className="hidden"
                     onChange={(e) => handleAvatarUpload(e.target.files?.[0] ?? null)}
                   />

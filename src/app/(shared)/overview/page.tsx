@@ -341,7 +341,7 @@ export default function OverviewPage() {
                   tick={{ fontSize: 11, fill: "#6b7280" }}
                 />
                 <Tooltip
-                  formatter={(value: number) => [`${value}%`, "Foiz"]}
+                  formatter={(value) => [`${Number(value ?? 0)}%`, "Foiz"]}
                   cursor={{ fill: "rgba(0,0,0,0.05)" }}
                 />
                 <Bar dataKey="foiz" radius={[4, 4, 0, 0]}>
@@ -393,8 +393,8 @@ export default function OverviewPage() {
                   tick={{ fontSize: 11, fill: "#6b7280" }}
                 />
                 <Tooltip
-                  formatter={(value: number, name: string) => [
-                    `${value}%`,
+                  formatter={(value, name) => [
+                    `${Number(value ?? 0)}%`,
                     name === "target" ? "Maqsad" : "Bajarilgan",
                   ]}
                   cursor={{ fill: "rgba(0,0,0,0.05)" }}
@@ -407,7 +407,7 @@ export default function OverviewPage() {
                   <LabelList
                     dataKey="target"
                     position="right"
-                    formatter={(v: number) => `${v}%`}
+                    formatter={(v) => `${Number(v ?? 0)}%`}
                     style={{ fontSize: 10, fill: "#6b7280" }}
                   />
                 </Bar>
@@ -422,7 +422,7 @@ export default function OverviewPage() {
                   <LabelList
                     dataKey="actual"
                     position="right"
-                    formatter={(v: number) => `${v}%`}
+                    formatter={(v) => `${Number(v ?? 0)}%`}
                     style={{ fontSize: 10, fill: "#6b7280" }}
                   />
                 </Bar>

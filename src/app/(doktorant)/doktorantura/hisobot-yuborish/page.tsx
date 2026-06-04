@@ -5,6 +5,12 @@ import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useSupabaseAuth } from "@/contexts/SupabaseAuthContext";
+import {
+  PROGRESS_REPORT_FILE_RULE,
+  acceptAttribute,
+  safeStorageFileName,
+  validateFile,
+} from "@/lib/upload-validation";
 
 interface ReportAttachment {
   path: string;
@@ -121,8 +127,9 @@ export default function HisobotYuborishPage() {
       if (files && files.length > 0) {
         for (let i = 0; i < files.length; i++) {
           const file = files[i];
-          const fileExt = file.name.split(".").pop();
-          const fileName = `${Math.random().toString(36).slice(2)}.${fileExt}`;
+          const validationError = validateFile(file, PROGRESS_REPORT_FILE_RULE);
+          if (validationError) throw new Error(validationError);
+          const fileName = `${Date.now()}_${i}_${safeStorageFileName(file.name)}`;
           const filePath = `${doktorantId}/${reportId}/${fileName}`;
 
           const { error: uploadError } = await supabase.storage
@@ -208,6 +215,7 @@ export default function HisobotYuborishPage() {
             <input
               id="files"
               type="file"
+              accept={acceptAttribute(PROGRESS_REPORT_FILE_RULE)}
               multiple
               className="w-full rounded-lg border border-(--outline) bg-(--surface) p-2 outline-none"
               onChange={(e) => setFiles(e.target.files)}

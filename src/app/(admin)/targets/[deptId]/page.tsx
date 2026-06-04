@@ -23,10 +23,13 @@ export default function TargetEditPage() {
   const year = Number(searchParams.get("year") ?? new Date().getFullYear());
   const quarter = (searchParams.get("quarter") ?? "Q1") as Quarter;
 
+  const QUARTERS: Quarter[] = ["Q1", "Q2", "Q3", "Q4"];
+
   const [department, setDepartment] = useState<Department | null>(null);
   const [faculty, setFaculty] = useState<Faculty | null>(null);
   const [indicators, setIndicators] = useState<Indicator[]>([]);
   const [values, setValues] = useState<Record<string, string>>({});
+  const [initialValues, setInitialValues] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -66,13 +69,16 @@ export default function TargetEditPage() {
       v[ind.id] = x === null || x === undefined ? "" : String(x);
     });
     setValues(v);
+    setInitialValues(v);
     setLoading(false);
   }, [supabase, deptId, user?.university_id, year, quarter]);
 
   useEffect(() => { load(); }, [load]);
 
-  const save = async () => {
-    if (!user?.university_id || !department) return;
+  const isDirty = JSON.stringify(values) !== JSON.stringify(initialValues);
+
+  const save = async (): Promise<boolean> => {
+    if (!user?.university_id || !department) return false;
     setSaving(true);
     setError("");
     setMessage("");
@@ -85,7 +91,7 @@ export default function TargetEditPage() {
       if (Number.isNaN(n)) {
         setSaving(false);
         setError(`"${ind.no}. ${ind.name}" — son kiriting yoki bo'sh qoldiring.`);
-        return;
+        return false;
       }
       numeric[ind.id] = n;
     }
@@ -105,8 +111,19 @@ export default function TargetEditPage() {
       .upsert(payload, { onConflict: "department_id,year,quarter" });
 
     setSaving(false);
-    if (e) { setError(e.message); return; }
+    if (e) { setError(e.message); return false; }
+    setInitialValues(values);
     setMessage("Maqsadlar saqlandi.");
+    return true;
+  };
+
+  const switchQuarter = async (q: Quarter) => {
+    if (q === quarter) return;
+    if (canEdit && isDirty) {
+      const ok = await save();
+      if (!ok) return;
+    }
+    router.push(`/targets/${deptId}?year=${year}&quarter=${q}`);
   };
 
   if (loading) {
@@ -150,7 +167,7 @@ export default function TargetEditPage() {
             <p className="text-sm text-surface-500 dark:text-surface-400 mt-1">
               {faculty?.name ?? "Fakultet"}
               <span className="mx-2 text-surface-300 dark:text-surface-600">·</span>
-              {year} yil, {quarter} chorak
+              {year} yil
             </p>
           </div>
           <span className={`inline-block px-3 py-1 rounded-full text-xs font-medium ${
@@ -160,6 +177,24 @@ export default function TargetEditPage() {
           }`}>
             {canEdit ? "Tahrirlash rejimi" : "Ko'rish rejimi"}
           </span>
+        </div>
+
+        {/* Quarter switcher */}
+        <div className="flex items-center gap-1 mt-4 p-1 bg-surface-100 dark:bg-surface-800 rounded-lg w-fit">
+          {QUARTERS.map((q) => (
+            <button
+              key={q}
+              onClick={() => switchQuarter(q)}
+              disabled={saving}
+              className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${
+                q === quarter
+                  ? "bg-white dark:bg-surface-700 text-surface-900 dark:text-surface-100 shadow-sm"
+                  : "text-surface-500 dark:text-surface-400 hover:text-surface-700 dark:hover:text-surface-200"
+              }`}
+            >
+              {q} chorak
+            </button>
+          ))}
         </div>
       </div>
 

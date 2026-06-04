@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import { useParams } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { createClient } from "@/lib/supabase/client";
@@ -102,8 +103,9 @@ function SelectField({
   );
 }
 
-export default function DoktorantProfilePage({ params }: { params: { id: string } }) {
+export default function DoktorantProfilePage() {
   const supabase = createClient();
+  const params = useParams<{ id: string }>();
   const [doktorant, setDoktorant] = useState<DoktorantRecord | null>(null);
   const [email, setEmail] = useState("");
   const [avatarUrl, setAvatarUrl] = useState("");

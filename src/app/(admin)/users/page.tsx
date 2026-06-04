@@ -234,7 +234,7 @@ export default function UsersPage() {
             <input
               ref={fileInputRef}
               type="file"
-              accept=".xlsx,.xls"
+              accept=".xlsx"
               className="hidden"
               onChange={handleBulkUpload}
             />

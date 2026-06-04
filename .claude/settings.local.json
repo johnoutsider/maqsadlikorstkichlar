@@ -14,7 +14,25 @@
       "Bash(rm -f \"src/hooks/useAuth.ts\" \"src/hooks/useIndicators.ts\" \"src/hooks/useNotifications.ts\" \"src/hooks/useSubmission.ts\" \"src/hooks/useTargets.ts\")",
       "Bash(rm -f \"src/components/ui/FileUpload.tsx\")",
       "Bash(rm -rf .next)",
-      "Bash(rm -rf \".next/types\")"
+      "Bash(rm -rf \".next/types\")",
+      "Bash(grep -E \"\\\\.\\(sql|ts|js\\)$\")",
+      "Bash(npx supabase *)",
+      "mcp__Claude_Preview__preview_start",
+      "Bash(curl -s -o nul -w \"%{http_code}\" http://localhost:3000)",
+      "Bash(curl -s -i http://localhost:3000/api/hemis/stat-employee)",
+      "Bash(curl -s http://localhost:3000/api/hemis/stat-employee)",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('success:', d.get\\('success'\\)\\); print\\('cached_at:', d.get\\('cached_at'\\)\\); print\\('stale:', d.get\\('stale'\\)\\); print\\('jami:', d['data']['gender']['Jami']\\)\")",
+      "Bash(curl -s http://localhost:3000/api/hemis/stat-structure)",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('success:', d.get\\('success'\\)\\); g=d['data']['groups']; print\\('Bakalavr jami:', sum\\(g['Bakalavr'].values\\(\\)\\)\\); print\\('Magistr jami:', sum\\(g['Magistr'].values\\(\\)\\)\\); print\\('auditoriums:', len\\(d['data']['auditoriums']\\)\\)\")",
+      "Bash(git stash *)",
+      "Bash(netstat -ano)",
+      "Bash(findstr \":3000\")",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Read(//c/Users/Jakhongir Khasanov/.claude/skills/notebooklm/**)",
+      "Bash(python scripts/run.py auth_manager.py status)",
+      "PowerShell(cd \"C:\\\\Users\\\\Jakhongir Khasanov\\\\.claude\\\\skills\\\\notebooklm\"; $env:PYTHONIOENCODING=\"utf-8\"; python scripts/run.py auth_manager.py status)"
     ]
   }
 }

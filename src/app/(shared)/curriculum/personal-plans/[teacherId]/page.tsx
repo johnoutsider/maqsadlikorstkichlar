@@ -51,9 +51,10 @@ function getStaticData(universityId: string): Promise<StaticData> {
 export default async function TeacherPlanPage({
   params,
 }: {
-  params: { teacherId: string };
+  params: Promise<{ teacherId: string }>;
 }) {
-  const supabase = createClient();
+  const { teacherId } = await params;
+  const supabase = await createClient();
 
   const { data: { user: authUser } } = await supabase.auth.getUser();
   if (!authUser) redirect("/login");
@@ -70,7 +71,7 @@ export default async function TeacherPlanPage({
   if (!universityId) notFound();
 
   const [teacherRes, staticData] = await Promise.all([
-    supabase.from("teachers").select("*").eq("id", params.teacherId).single(),
+    supabase.from("teachers").select("*").eq("id", teacherId).single(),
     getStaticData(universityId),
   ]);
 
@@ -86,7 +87,7 @@ export default async function TeacherPlanPage({
     const { data: planData } = await supabase
       .from("teacher_work_plans")
       .select("*")
-      .eq("teacher_id", params.teacherId)
+      .eq("teacher_id", teacherId)
       .eq("academic_year_id", staticData.activeYear.id)
       .maybeSingle();
 

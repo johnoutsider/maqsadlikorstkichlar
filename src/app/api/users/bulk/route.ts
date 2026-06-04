@@ -1,8 +1,15 @@
 import { NextResponse } from "next/server";
-import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import {
+  EXCEL_IMPORT_FILE_RULE,
+  MAX_BULK_IMPORT_ROWS,
+  validateFile,
+} from "@/lib/upload-validation";
 import type { RoleName } from "@/types/db";
+
+export const runtime = "nodejs";
 
 const ROLE_LABEL_TO_NAME: Record<string, RoleName> = {
   "Universitet admin": "university_admin",
@@ -19,8 +26,24 @@ function bad(msg: string, status = 400) {
   return NextResponse.json({ error: msg }, { status });
 }
 
+function cellText(value: ExcelJS.CellValue) {
+  if (value === null || value === undefined) return "";
+  if (value instanceof Date) return value.toISOString().slice(0, 10);
+  if (typeof value === "object") {
+    if ("text" in value && typeof value.text === "string") return value.text;
+    if ("result" in value) return cellText(value.result as ExcelJS.CellValue);
+    if ("richText" in value && Array.isArray(value.richText)) {
+      return value.richText.map((part) => part.text).join("");
+    }
+    if ("hyperlink" in value && "text" in value && typeof value.text === "string") {
+      return value.text;
+    }
+  }
+  return String(value);
+}
+
 export async function POST(req: Request) {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user: authUser },
   } = await supabase.auth.getUser();
@@ -49,14 +72,24 @@ export async function POST(req: Request) {
   const file = formData.get("file") as File | null;
   if (!file) return bad("No file uploaded");
 
-  const buffer = Buffer.from(await file.arrayBuffer());
-  const wb = XLSX.read(buffer, { type: "buffer" });
-  const ws = wb.Sheets[wb.SheetNames[0]];
-  if (!ws) return bad("Excel file has no sheets");
+  const validationError = validateFile(file, EXCEL_IMPORT_FILE_RULE);
+  if (validationError) return bad(validationError);
 
-  const rawRows = XLSX.utils.sheet_to_json<string[]>(ws, { header: 1, defval: "" });
-  // Skip header row
-  const dataRows = rawRows.slice(1) as string[][];
+  const buffer = Buffer.from(await file.arrayBuffer());
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(buffer as any);
+  const worksheet = workbook.worksheets[0];
+  if (!worksheet) return bad("Excel file has no sheets");
+
+  if (worksheet.rowCount - 1 > MAX_BULK_IMPORT_ROWS) {
+    return bad(`Excel faylida ko'pi bilan ${MAX_BULK_IMPORT_ROWS} ta foydalanuvchi bo'lishi mumkin.`);
+  }
+
+  const dataRows: string[][] = [];
+  worksheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+    if (rowNumber === 1) return;
+    dataRows.push([1, 2, 3, 4, 5, 6].map((column) => cellText(row.getCell(column).value).trim()));
+  });
 
   if (dataRows.length === 0) {
     return bad("Excel file has no data rows (only header found)");

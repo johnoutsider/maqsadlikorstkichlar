@@ -17,6 +17,12 @@ import {
   clearRejectedReviews,
 } from "@/lib/workflow";
 import { buildReviewSummaryEntries, normalizeSubmission } from "@/lib/submission";
+import {
+  SUBMISSION_FILE_RULE,
+  acceptAttribute,
+  safeStorageFileName,
+  validateFile,
+} from "@/lib/upload-validation";
 
 const QUARTERS: Quarter[] = ["Q1", "Q2", "Q3", "Q4"];
 
@@ -266,8 +272,13 @@ export default function FormPage() {
   const uploadFile = async (indicatorId: string, file: File) => {
     if (!user?.university_id || !user?.department_id) return;
     setError("");
+    const validationError = validateFile(file, SUBMISSION_FILE_RULE);
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
     setUploadingFor(indicatorId);
-    const safeName = file.name.replace(/[^\w.\-]+/g, "_");
+    const safeName = safeStorageFileName(file.name);
     const path = `${user.university_id}/${year}/${quarter}/${user.department_id}/${indicatorId}/${Date.now()}_${safeName}`;
     const { error: e } = await supabase.storage.from("submissions").upload(path, file);
     setUploadingFor(null);
@@ -466,6 +477,7 @@ export default function FormPage() {
                             {uploadingFor === ind.id ? "Yuklanmoqda..." : "+ Fayl qo'shish"}
                             <input
                               type="file"
+                              accept={acceptAttribute(SUBMISSION_FILE_RULE)}
                               className="hidden"
                               disabled={uploadingFor === ind.id}
                               onChange={(e) => {
