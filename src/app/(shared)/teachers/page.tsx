@@ -1,12 +1,13 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { useSupabaseAuth } from "@/contexts/SupabaseAuthContext";
 import { cacheInvalidate } from "@/lib/curriculum-cache";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { Modal } from "@/components/ui/Modal";
 import type {
   Teacher,
   IlmiyDaraja,
@@ -37,12 +38,21 @@ export default function TeachersPage() {
 
   const isStaffManager = user?.role === "staff_manager";
   const canEdit = isStaffManager;
+  const canImport = user?.role === "university_admin" || user?.role === "super_admin";
 
   const [rows, setRows] = useState<TeacherRow[]>([]);
   const [faculties, setFaculties] = useState<Faculty[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  // Bulk import
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [bulkUploading, setBulkUploading] = useState(false);
+  const [bulkResultOpen, setBulkResultOpen] = useState(false);
+  type BulkRow = { row: number; name: string; status: "success" | "updated" | "error"; error?: string };
+  const [bulkResults, setBulkResults] = useState<BulkRow[]>([]);
+  const [bulkSummary, setBulkSummary] = useState({ succeeded: 0, updated: 0, failed: 0 });
 
   // Filters
   const [search, setSearch] = useState("");
@@ -132,6 +142,31 @@ export default function TeachersPage() {
   }
 
   // -------------------------------------------------------------------------
+  async function handleBulkUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = "";
+
+    setBulkUploading(true);
+    const fd = new FormData();
+    fd.append("file", file);
+
+    const res = await fetch("/api/teachers/bulk", { method: "POST", body: fd });
+    setBulkUploading(false);
+
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      alert(data?.error ?? `HTTP ${res.status}`);
+      return;
+    }
+
+    setBulkResults(data.results ?? []);
+    setBulkSummary({ succeeded: data.succeeded ?? 0, updated: data.updated ?? 0, failed: data.failed ?? 0 });
+    setBulkResultOpen(true);
+    load();
+  }
+
+  // -------------------------------------------------------------------------
   function exportCsv() {
     const headers = [
       "Familiya", "Ism", "Otasining ismi",
@@ -189,6 +224,28 @@ export default function TeachersPage() {
           <Button variant="outline" onClick={exportCsv} disabled={filtered.length === 0}>
             Excel / CSV
           </Button>
+          {canImport && (
+            <>
+              <a href="/api/teachers/bulk" download>
+                <Button variant="outline" size="sm">Shablon</Button>
+              </a>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".xlsx"
+                className="hidden"
+                onChange={handleBulkUpload}
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                isLoading={bulkUploading}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                Excel import
+              </Button>
+            </>
+          )}
           {canEdit && (
             <Button onClick={() => router.push("/teachers/new")}>
               + O&apos;qituvchi qo&apos;shish
@@ -362,6 +419,64 @@ export default function TeachersPage() {
           </table>
         )}
       </div>
+      {/* Bulk import results modal */}
+      <Modal isOpen={bulkResultOpen} onClose={() => setBulkResultOpen(false)} title="Excel import natijalari">
+        <div className="space-y-4">
+          <div className="flex flex-wrap gap-3">
+            <span className="rounded-full bg-green-100 px-3 py-1 text-sm font-medium text-green-700 dark:bg-green-900/30 dark:text-green-400">
+              ✓ {bulkSummary.succeeded} ta qo&apos;shildi
+            </span>
+            {bulkSummary.updated > 0 && (
+              <span className="rounded-full bg-blue-100 px-3 py-1 text-sm font-medium text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
+                ↻ {bulkSummary.updated} ta yangilandi
+              </span>
+            )}
+            {bulkSummary.failed > 0 && (
+              <span className="rounded-full bg-red-100 px-3 py-1 text-sm font-medium text-red-700 dark:bg-red-900/30 dark:text-red-400">
+                ✗ {bulkSummary.failed} ta xato
+              </span>
+            )}
+          </div>
+
+          <div className="max-h-96 overflow-y-auto rounded-lg border border-surface-200 dark:border-surface-700">
+            <table className="w-full text-sm">
+              <thead className="sticky top-0 border-b border-surface-200 bg-surface-50 dark:border-surface-700 dark:bg-surface-900">
+                <tr>
+                  <th className="px-3 py-2 text-left text-xs font-semibold uppercase text-surface-600">#</th>
+                  <th className="px-3 py-2 text-left text-xs font-semibold uppercase text-surface-600">F.I.Sh</th>
+                  <th className="px-3 py-2 text-left text-xs font-semibold uppercase text-surface-600">Holat</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-surface-200 dark:divide-surface-700">
+                {bulkResults.map((r) => (
+                  <tr
+                    key={r.row}
+                    className={r.status === "error" ? "bg-red-50 dark:bg-red-900/10" : ""}
+                  >
+                    <td className="px-3 py-2 text-surface-500">{r.row}</td>
+                    <td className="px-3 py-2">{r.name || "—"}</td>
+                    <td className="px-3 py-2">
+                      {r.status === "success" && (
+                        <span className="text-green-600 dark:text-green-400">✓ Qo&apos;shildi</span>
+                      )}
+                      {r.status === "updated" && (
+                        <span className="text-blue-600 dark:text-blue-400">↻ Yangilandi</span>
+                      )}
+                      {r.status === "error" && (
+                        <span className="text-red-600 dark:text-red-400">✗ {r.error}</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="flex justify-end">
+            <Button onClick={() => setBulkResultOpen(false)}>Yopish</Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

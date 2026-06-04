@@ -10,6 +10,7 @@ import type { TeacherFormState } from "../../_lib/options";
 
 function teacherToForm(t: Teacher): TeacherFormState {
   return {
+    full_name:         [t.last_name, t.first_name, t.middle_name].filter(Boolean).join(" "),
     last_name:         t.last_name,
     first_name:        t.first_name,
     middle_name:       t.middle_name       ?? "",

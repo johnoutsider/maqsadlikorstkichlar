@@ -219,10 +219,10 @@ export interface Evaluation {
   created_at: string;
 }
 
-export type IlmiyDaraja = 'fan_doktori' | 'fan_nomzodi' | 'phd' | 'yoq';
-export type IlmiyUnvon  = 'professor' | 'dotsent' | 'katta_oqituvchi' | 'oqituvchi' | 'assistent';
+export type IlmiyDaraja = 'phd' | 'dsc' | 'darajasiz';
+export type IlmiyUnvon  = 'professor' | 'dotsent' | 'unvonsiz';
 export type Stavka      = '0.25' | '0.5' | '0.75' | '1.0' | '1.25' | '1.5';
-export type IshTuri     = 'asosiy' | 'orindosh';
+export type IshTuri     = 'asosiy' | 'doktorant' | 'doktorant_shartnoma' | 'doktorant_ichki_orindosh' | 'ichki_orindosh' | 'magistrant' | 'shartnoma_muddatli' | 'tashqi_orindosh';
 export type FaoliyatHolati = 'faol' | 'ishdan_ketgan' | 'tatilda';
 
 export interface Teacher {

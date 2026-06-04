@@ -35,23 +35,12 @@ function validate(form: TeacherFormState, isStaffManager: boolean): Errors {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  // Names
-  if (!form.last_name.trim()) {
-    e.last_name = "Familiya kiritilishi shart.";
-  } else if (!NAME_RE.test(form.last_name.trim())) {
-    e.last_name = "Faqat harflar, bo'shliq yoki tire kiritish mumkin (min 2 belgi).";
-  }
-
-  if (!form.first_name.trim()) {
-    e.first_name = "Ism kiritilishi shart.";
-  } else if (!NAME_RE.test(form.first_name.trim())) {
-    e.first_name = "Faqat harflar, bo'shliq yoki tire kiritish mumkin (min 2 belgi).";
-  }
-
-  if (!form.middle_name.trim()) {
-    e.middle_name = "Otasining ismi kiritilishi shart.";
-  } else if (!NAME_RE.test(form.middle_name.trim())) {
-    e.middle_name = "Faqat harflar, bo'shliq yoki tire kiritish mumkin (min 2 belgi).";
+  // Full name
+  const nameParts = form.full_name.trim().split(/\s+/).filter(Boolean);
+  if (nameParts.length < 3) {
+    e.full_name = "Familiya, ism va otasining ismini kiriting (kamida 3 so'z).";
+  } else if (nameParts.some((w) => !NAME_RE.test(w))) {
+    e.full_name = "Faqat harflar, bo'shliq yoki tire kiritish mumkin.";
   }
 
   // Birth date
@@ -241,7 +230,13 @@ export function TeacherForm({ mode, teacherId, initialValues }: Props) {
 
   const [faculties, setFaculties] = useState<Faculty[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
-  const [form, setForm] = useState<TeacherFormState>({ ...EMPTY_FORM, ...initialValues });
+  const [form, setForm] = useState<TeacherFormState>(() => {
+    const base = { ...EMPTY_FORM, ...initialValues };
+    if (!base.full_name && (base.last_name || base.first_name || base.middle_name)) {
+      base.full_name = [base.last_name, base.first_name, base.middle_name].filter(Boolean).join(" ");
+    }
+    return base;
+  });
   const [errors, setErrors] = useState<Errors>({});
   const [submitted, setSubmitted] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -281,6 +276,12 @@ export function TeacherForm({ mode, teacherId, initialValues }: Props) {
   // Re-validate on every change after first submit attempt
   function set(key: keyof TeacherFormState, value: string) {
     const next = { ...form, [key]: value };
+    if (key === "full_name") {
+      const parts = value.trim().split(/\s+/);
+      next.last_name   = parts[0] ?? "";
+      next.first_name  = parts[1] ?? "";
+      next.middle_name = parts.slice(2).join(" ");
+    }
     setForm(next);
     if (submitted) {
       const nextErrors = validate(next, isStaffManager);
@@ -372,32 +373,15 @@ export function TeacherForm({ mode, teacherId, initialValues }: Props) {
       <Card>
         <SectionTitle>Shaxsiy ma&apos;lumotlar</SectionTitle>
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <Input
-            label="Familiya *"
-            value={form.last_name}
-            onChange={(e) => set("last_name", e.target.value)}
-            error={errors.last_name}
-            placeholder="Karimov"
-            autoComplete="off"
-          />
-          <Input
-            label="Ism *"
-            value={form.first_name}
-            onChange={(e) => set("first_name", e.target.value)}
-            error={errors.first_name}
-            placeholder="Alisher"
-            autoComplete="off"
-          />
-          <Input
-            label="Otasining ismi *"
-            value={form.middle_name}
-            onChange={(e) => set("middle_name", e.target.value)}
-            error={errors.middle_name}
-            placeholder="Bahodirovich"
-            autoComplete="off"
-          />
-        </div>
+        <Input
+          label="F.I.Sh. *"
+          value={form.full_name}
+          onChange={(e) => set("full_name", e.target.value)}
+          error={errors.full_name}
+          placeholder="Karimov Alisher Bahodirovich"
+          hint="Familiya, ism va otasining ismini kiriting"
+          autoComplete="off"
+        />
 
         <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Input
