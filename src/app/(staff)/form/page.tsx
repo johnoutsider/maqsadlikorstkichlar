@@ -51,7 +51,7 @@ export default function FormPage() {
   const [quarter, setQuarter] = useState<Quarter>(currentQuarter());
   const [periodInit, setPeriodInit] = useState(false);
   const [indicators, setIndicators] = useState<Indicator[]>(
-    _cachedIndicators?.universityId === user?.university_id ? _cachedIndicators.data : []
+    (_cachedIndicators !== null && _cachedIndicators.universityId === user?.university_id) ? _cachedIndicators.data : []
   );
   const [submission, setSubmission] = useState<Submission | null>(null);
   const [target, setTarget] = useState<import("@/types/db").Target | null>(null);
@@ -78,7 +78,7 @@ export default function FormPage() {
         .eq("university_id", user.university_id)
         .order("order_idx");
       const list = (data as Indicator[]) ?? [];
-      _cachedIndicators = { universityId: user.university_id, data: list };
+      _cachedIndicators = { universityId: user.university_id!, data: list };
       setIndicators(list);
     })();
   }, [user?.university_id, supabase]);
