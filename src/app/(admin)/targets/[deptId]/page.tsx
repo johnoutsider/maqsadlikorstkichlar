@@ -218,59 +218,105 @@ export default function TargetEditPage() {
         <div className="bg-white dark:bg-surface-800 rounded-lg border border-surface-200 dark:border-surface-700 p-8 text-center text-surface-500">
           Ko&apos;rsatkichlar hali sozlanmagan.
         </div>
-      ) : (
-        <div className="bg-white dark:bg-surface-800 rounded-lg border border-surface-200 dark:border-surface-700 overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-surface-50 dark:bg-surface-900/50 border-b border-surface-200 dark:border-surface-700 sticky top-0 z-10">
-                <tr>
-                  <th className="px-5 py-3 text-left text-xs font-semibold text-surface-600 dark:text-surface-400 uppercase w-14">№</th>
-                  <th className="px-5 py-3 text-left text-xs font-semibold text-surface-600 dark:text-surface-400 uppercase">Ko&apos;rsatkich</th>
-                  <th className="px-5 py-3 text-left text-xs font-semibold text-surface-600 dark:text-surface-400 uppercase w-24">Birlik</th>
-                  <th className="px-5 py-3 text-left text-xs font-semibold text-surface-600 dark:text-surface-400 uppercase w-40">Maqsad</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-surface-200 dark:divide-surface-700">
-                {indicators.map((ind) => (
-                  <tr
-                    key={ind.id}
-                    className={`hover:bg-surface-50 dark:hover:bg-surface-900/20 transition-colors ${ind.is_sub_indicator ? "bg-surface-50/50 dark:bg-surface-900/20" : ""}`}
-                  >
-                    <td className="px-5 py-3.5 text-sm font-mono text-surface-500 dark:text-surface-400 align-top pt-4">
-                      {ind.no}
-                    </td>
-                    <td className={`px-5 py-3.5 text-sm align-top pt-4 ${ind.is_sub_indicator ? "pl-10 text-surface-600 dark:text-surface-400" : "text-surface-900 dark:text-surface-100 font-medium"}`}>
-                      {ind.name}
-                    </td>
-                    <td className="px-5 py-3.5 text-sm text-surface-500 dark:text-surface-400 align-top pt-4">
-                      {ind.unit}
-                    </td>
-                    <td className="px-5 py-3 align-middle">
-                      {canEdit ? (
-                        <input
-                          type="number"
-                          step="any"
-                          value={values[ind.id] ?? ""}
-                          onChange={(e) => setValues((p) => ({ ...p, [ind.id]: e.target.value }))}
-                          placeholder="—"
-                          className="w-full rounded-md border border-surface-300 dark:border-surface-600 bg-white dark:bg-surface-800 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
-                        />
-                      ) : (
-                        <span className="text-sm font-medium text-surface-700 dark:text-surface-300">
-                          {values[ind.id] !== "" && values[ind.id] !== undefined
-                            ? values[ind.id]
-                            : <span className="text-surface-400">—</span>
-                          }
-                        </span>
-                      )}
-                    </td>
+      ) : (() => {
+        // compute which indicator ids have children
+        const childrenByParent: Record<string, Indicator[]> = {};
+        indicators.forEach((ind) => {
+          if (ind.parent_id) {
+            (childrenByParent[ind.parent_id] ??= []).push(ind);
+          }
+        });
+
+        const getSum = (parentId: string): string => {
+          const children = childrenByParent[parentId] ?? [];
+          if (children.length === 0) return "";
+          const nums = children.map((c) => Number(values[c.id] ?? 0));
+          const total = nums.reduce((a, b) => a + b, 0);
+          return String(total);
+        };
+
+        return (
+          <div className="bg-white dark:bg-surface-800 rounded-lg border border-surface-200 dark:border-surface-700 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-surface-50 dark:bg-surface-900/50 border-b border-surface-200 dark:border-surface-700 sticky top-0 z-10">
+                  <tr>
+                    <th className="px-5 py-3 text-left text-xs font-semibold text-surface-600 dark:text-surface-400 uppercase w-14">№</th>
+                    <th className="px-5 py-3 text-left text-xs font-semibold text-surface-600 dark:text-surface-400 uppercase">Ko&apos;rsatkich</th>
+                    <th className="px-5 py-3 text-left text-xs font-semibold text-surface-600 dark:text-surface-400 uppercase w-24">Birlik</th>
+                    <th className="px-5 py-3 text-left text-xs font-semibold text-surface-600 dark:text-surface-400 uppercase w-40">Maqsad</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-surface-200 dark:divide-surface-700">
+                  {indicators.map((ind) => {
+                    const isParent = !!childrenByParent[ind.id]?.length;
+                    const sum = isParent ? getSum(ind.id) : null;
+
+                    return (
+                      <tr
+                        key={ind.id}
+                        className={`transition-colors ${
+                          isParent
+                            ? "bg-primary-50/40 dark:bg-primary-900/10"
+                            : ind.is_sub_indicator
+                            ? "bg-surface-50/50 dark:bg-surface-900/20 hover:bg-surface-50 dark:hover:bg-surface-900/30"
+                            : "hover:bg-surface-50 dark:hover:bg-surface-900/20"
+                        }`}
+                      >
+                        <td className="px-5 py-3.5 text-sm font-mono text-surface-500 dark:text-surface-400 align-middle">
+                          {ind.no}
+                        </td>
+                        <td className={`px-5 py-3.5 text-sm align-middle ${
+                          ind.is_sub_indicator
+                            ? "pl-10 text-surface-600 dark:text-surface-400"
+                            : "text-surface-900 dark:text-surface-100 font-medium"
+                        }`}>
+                          {ind.is_sub_indicator && <span className="mr-1 text-surface-400">↳</span>}
+                          {ind.name}
+                          {isParent && (
+                            <span className="ml-2 text-[10px] font-medium px-1.5 py-0.5 rounded bg-primary-100 text-primary-700 dark:bg-primary-900/40 dark:text-primary-300">
+                              YIG&apos;INDI
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-5 py-3.5 text-sm text-surface-500 dark:text-surface-400 align-middle">
+                          {ind.unit}
+                        </td>
+                        <td className="px-5 py-3 align-middle">
+                          {isParent ? (
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-semibold text-primary-700 dark:text-primary-300">
+                                {sum !== "" ? sum : "—"}
+                              </span>
+                              <span className="text-[10px] text-surface-400">avtomatik</span>
+                            </div>
+                          ) : canEdit ? (
+                            <input
+                              type="number"
+                              step="any"
+                              value={values[ind.id] ?? ""}
+                              onChange={(e) => setValues((p) => ({ ...p, [ind.id]: e.target.value }))}
+                              placeholder="—"
+                              className="w-full rounded-md border border-surface-300 dark:border-surface-600 bg-white dark:bg-surface-800 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
+                            />
+                          ) : (
+                            <span className="text-sm font-medium text-surface-700 dark:text-surface-300">
+                              {values[ind.id] !== "" && values[ind.id] !== undefined
+                                ? values[ind.id]
+                                : <span className="text-surface-400">—</span>
+                              }
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Footer actions */}
       {indicators.length > 0 && (

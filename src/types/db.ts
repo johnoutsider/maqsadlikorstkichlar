@@ -108,6 +108,7 @@ export interface Indicator {
   unit: string;
   order_idx: number;
   is_sub_indicator: boolean;
+  parent_id: string | null;
   created_at: string;
 }
 

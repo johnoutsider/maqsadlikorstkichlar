@@ -22,6 +22,7 @@ export default function IndicatorsPage() {
   const [name, setName] = useState("");
   const [unit, setUnit] = useState("");
   const [isSub, setIsSub] = useState(false);
+  const [parentId, setParentId] = useState<string>("");
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
 
@@ -43,6 +44,9 @@ export default function IndicatorsPage() {
   }, [supabase, user?.university_id]);
 
   useEffect(() => { load(); }, [load]);
+
+  // parent indicators = non-sub indicators that other rows can be grouped under
+  const parentOptions = rows.filter((r) => !r.is_sub_indicator);
 
   // ── Drag-and-drop ──────────────────────────────────────────────
   const handleDragStart = (e: React.DragEvent, idx: number) => {
@@ -66,7 +70,6 @@ export default function IndicatorsPage() {
     e.preventDefault();
     setDragOverIdx(null);
     dragIdx.current = null;
-    // persist new order_idx values
     setReordering(true);
     await Promise.all(
       rows.map((r, i) =>
@@ -88,6 +91,7 @@ export default function IndicatorsPage() {
     setName("");
     setUnit("");
     setIsSub(false);
+    setParentId("");
     setFormError("");
     setModalOpen(true);
   };
@@ -98,6 +102,7 @@ export default function IndicatorsPage() {
     setName(i.name);
     setUnit(i.unit);
     setIsSub(i.is_sub_indicator);
+    setParentId(i.parent_id ?? "");
     setFormError("");
     setModalOpen(true);
   };
@@ -108,6 +113,10 @@ export default function IndicatorsPage() {
     if (!user?.university_id) return;
     if (!no.trim() || !name.trim() || !unit.trim()) {
       setFormError("Barcha maydonlar talab qilinadi.");
+      return;
+    }
+    if (isSub && !parentId) {
+      setFormError("Sub-ko'rsatkich uchun asosiy ko'rsatkichni tanlang.");
       return;
     }
     setSaving(true);
@@ -121,6 +130,7 @@ export default function IndicatorsPage() {
       unit: unit.trim(),
       order_idx: orderIdx,
       is_sub_indicator: isSub,
+      parent_id: isSub ? parentId : null,
       university_id: user.university_id,
     };
     const { error: e2 } = editing
@@ -141,6 +151,9 @@ export default function IndicatorsPage() {
     if (e) { alert(e.message); return; }
     load();
   };
+
+  // which indicator ids are parents (have at least one child)
+  const parentIds = new Set(rows.map((r) => r.parent_id).filter(Boolean));
 
   return (
     <div>
@@ -168,48 +181,73 @@ export default function IndicatorsPage() {
           <table className="w-full">
             <thead className="bg-surface-50 dark:bg-surface-900/50 border-b border-surface-200 dark:border-surface-700">
               <tr>
-                <th className="px-3 py-3 w-10" title="Tartibni o'zgartirish uchun sudrang">
-                  <svg className="w-4 h-4 text-surface-400 mx-auto" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M8 6a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zm8 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zM8 13.5a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zm8 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zM8 21a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zm8 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3z" />
-                  </svg>
-                </th>
+                <th className="px-3 py-3 w-10" title="Tartibni o'zgartirish uchun sudrang" />
                 <th className="px-4 py-3 text-left text-xs font-semibold text-surface-600 uppercase w-16">№</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-surface-600 uppercase">Nom</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-surface-600 uppercase w-24">Birlik</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-surface-600 uppercase w-20">Sub</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-surface-600 uppercase w-28">Turi</th>
                 <th className="px-4 py-3" />
               </tr>
             </thead>
             <tbody className="divide-y divide-surface-200 dark:divide-surface-700">
-              {rows.map((ind, idx) => (
-                <tr
-                  key={ind.id}
-                  draggable
-                  onDragStart={(e) => handleDragStart(e, idx)}
-                  onDragOver={(e) => handleDragOver(e, idx)}
-                  onDrop={handleDrop}
-                  onDragEnd={handleDragEnd}
-                  className={`transition-colors ${
-                    dragOverIdx === idx
-                      ? "bg-primary-50 dark:bg-primary-900/20"
-                      : "hover:bg-surface-50 dark:hover:bg-surface-900/30"
-                  }`}
-                >
-                  <td className="px-3 py-3 cursor-grab active:cursor-grabbing text-center">
-                    <svg className="w-4 h-4 text-surface-400 mx-auto" fill="currentColor" viewBox="0 0 24 24">
-                      <path d="M8 6a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zm8 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zM8 13.5a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zm8 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zM8 21a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zm8 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3z" />
-                    </svg>
-                  </td>
-                  <td className="px-4 py-3 text-sm font-mono">{ind.no}</td>
-                  <td className={`px-4 py-3 text-sm ${ind.is_sub_indicator ? "pl-8 text-surface-600" : ""}`}>{ind.name}</td>
-                  <td className="px-4 py-3 text-sm text-surface-500">{ind.unit}</td>
-                  <td className="px-4 py-3 text-sm">{ind.is_sub_indicator ? "✓" : ""}</td>
-                  <td className="px-4 py-3 text-right space-x-2">
-                    <Button variant="outline" size="sm" onClick={() => openEdit(ind)}>Tahrirlash</Button>
-                    <Button variant="danger" size="sm" onClick={() => remove(ind)}>O&apos;chirish</Button>
-                  </td>
-                </tr>
-              ))}
+              {rows.map((ind, idx) => {
+                const isParent = parentIds.has(ind.id);
+                const parentLabel = ind.parent_id
+                  ? rows.find((r) => r.id === ind.parent_id)?.no
+                  : null;
+
+                return (
+                  <tr
+                    key={ind.id}
+                    draggable
+                    onDragStart={(e) => handleDragStart(e, idx)}
+                    onDragOver={(e) => handleDragOver(e, idx)}
+                    onDrop={handleDrop}
+                    onDragEnd={handleDragEnd}
+                    className={`transition-colors ${
+                      dragOverIdx === idx
+                        ? "bg-primary-50 dark:bg-primary-900/20"
+                        : isParent
+                        ? "bg-surface-50/70 dark:bg-surface-900/40 hover:bg-surface-100/70 dark:hover:bg-surface-900/60"
+                        : "hover:bg-surface-50 dark:hover:bg-surface-900/30"
+                    }`}
+                  >
+                    <td className="px-3 py-3 cursor-grab active:cursor-grabbing text-center">
+                      <svg className="w-4 h-4 text-surface-400 mx-auto" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M8 6a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zm8 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zM8 13.5a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zm8 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zM8 21a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zm8 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3z" />
+                      </svg>
+                    </td>
+                    <td className="px-4 py-3 text-sm font-mono font-semibold">{ind.no}</td>
+                    <td className={`px-4 py-3 text-sm ${ind.is_sub_indicator ? "pl-10 text-surface-600 dark:text-surface-400" : "font-medium"}`}>
+                      {ind.is_sub_indicator && (
+                        <span className="mr-1 text-surface-400">↳</span>
+                      )}
+                      {ind.name}
+                      {isParent && (
+                        <span className="ml-2 text-[10px] font-medium px-1.5 py-0.5 rounded bg-primary-100 text-primary-700 dark:bg-primary-900/40 dark:text-primary-300">
+                          YIG&apos;INDI
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-surface-500">{ind.unit}</td>
+                    <td className="px-4 py-3 text-xs text-surface-500">
+                      {isParent ? (
+                        <span className="text-primary-600 dark:text-primary-400 font-medium">Asosiy</span>
+                      ) : ind.is_sub_indicator ? (
+                        <span className="text-surface-400">
+                          Sub {parentLabel ? `(${parentLabel})` : ""}
+                        </span>
+                      ) : (
+                        <span className="text-surface-400">Oddiy</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-right space-x-2">
+                      <Button variant="outline" size="sm" onClick={() => openEdit(ind)}>Tahrirlash</Button>
+                      <Button variant="danger" size="sm" onClick={() => remove(ind)}>O&apos;chirish</Button>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         )}
@@ -225,10 +263,42 @@ export default function IndicatorsPage() {
             <Input label="Birlik" value={unit} onChange={(e) => setUnit(e.target.value)} placeholder="%, nafar, dona" required />
           </div>
           <Input label="Nomi" value={name} onChange={(e) => setName(e.target.value)} required />
-          <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={isSub} onChange={(e) => setIsSub(e.target.checked)} />
+
+          <label className="flex items-center gap-2 text-sm cursor-pointer">
+            <input
+              type="checkbox"
+              checked={isSub}
+              onChange={(e) => {
+                setIsSub(e.target.checked);
+                if (!e.target.checked) setParentId("");
+              }}
+            />
             Bu sub-ko&apos;rsatkich
           </label>
+
+          {isSub && (
+            <div>
+              <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">
+                Asosiy ko&apos;rsatkich <span className="text-danger-500">*</span>
+              </label>
+              <select
+                value={parentId}
+                onChange={(e) => setParentId(e.target.value)}
+                className="w-full rounded-md border border-surface-300 dark:border-surface-600 bg-white dark:bg-surface-800 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                required
+              >
+                <option value="">— Tanlang —</option>
+                {parentOptions
+                  .filter((p) => !editing || p.id !== editing.id)
+                  .map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.no}. {p.name}
+                    </option>
+                  ))}
+              </select>
+            </div>
+          )}
+
           <div className="flex justify-end gap-2 pt-2">
             <Button type="button" variant="outline" onClick={() => setModalOpen(false)}>Bekor qilish</Button>
             <Button type="submit" isLoading={saving}>{editing ? "Saqlash" : "Yaratish"}</Button>
