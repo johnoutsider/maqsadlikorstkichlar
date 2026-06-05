@@ -67,6 +67,30 @@ export function AppShell({
   const { user, loading } = useSupabaseAuth();
   const [unread, setUnread] = useState(0);
   const [brand, setBrand] = useState<UniversityBrand>(DEFAULT_BRAND);
+  const [collapsed, setCollapsed] = useState(false);
+
+  // Restore collapsed preference (client-only to avoid hydration mismatch)
+  useEffect(() => {
+    try {
+      if (window.localStorage.getItem("sidebar-collapsed") === "true") {
+        setCollapsed(true);
+      }
+    } catch {
+      // ignore storage errors
+    }
+  }, []);
+
+  const toggleCollapsed = () => {
+    setCollapsed((prev) => {
+      const next = !prev;
+      try {
+        window.localStorage.setItem("sidebar-collapsed", String(next));
+      } catch {
+        // ignore storage errors
+      }
+      return next;
+    });
+  };
 
   useEffect(() => {
     if (loading) return;
@@ -208,8 +232,17 @@ export function AppShell({
 
   return (
     <div className="min-h-screen" style={{ background: "var(--surface)" }}>
-      <Sidebar unreadCount={unread} brand={brand} />
-      <div className="lg:pl-64 flex flex-col min-h-screen">
+      <Sidebar
+        unreadCount={unread}
+        brand={brand}
+        collapsed={collapsed}
+        onToggleCollapse={toggleCollapsed}
+      />
+      <div
+        className={`flex flex-col min-h-screen transition-[padding] duration-200 ${
+          collapsed ? "lg:pl-20" : "lg:pl-64"
+        }`}
+      >
         <Topbar brand={brand} />
         <main className="flex-1 max-w-[1400px] w-full mx-auto px-4 sm:px-6 lg:px-8 py-7 sm:py-9">
           {children}

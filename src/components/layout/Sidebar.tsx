@@ -237,7 +237,17 @@ function findInitialOpen(navItems: NavItem[], pathname: string): Record<string, 
   return result;
 }
 
-export function Sidebar({ unreadCount = 0, brand }: { unreadCount?: number; brand: UniversityBrand }) {
+export function Sidebar({
+  unreadCount = 0,
+  brand,
+  collapsed = false,
+  onToggleCollapse,
+}: {
+  unreadCount?: number;
+  brand: UniversityBrand;
+  collapsed?: boolean;
+  onToggleCollapse?: () => void;
+}) {
   const pathname = usePathname();
   const { user } = useSupabaseAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -274,7 +284,7 @@ export function Sidebar({ unreadCount = 0, brand }: { unreadCount?: number; bran
     });
   }
 
-  const renderItem = (item: NavItem, depth: number, siblings: NavItem[]): React.ReactNode => {
+  const renderItem = (item: NavItem, depth: number, siblings: NavItem[], isCollapsed: boolean): React.ReactNode => {
     const active = isItemActive(item);
 
     // Group (has children)
@@ -285,10 +295,20 @@ export function Sidebar({ unreadCount = 0, brand }: { unreadCount?: number; bran
       return (
         <div key={item.label}>
           <button
-            onClick={() => toggleGroup(item.label, siblings)}
+            onClick={() => {
+              if (isCollapsed) {
+                // Expand the rail first, then open this group
+                onToggleCollapse?.();
+                setOpenGroups((prev) => ({ ...prev, [item.label]: true }));
+              } else {
+                toggleGroup(item.label, siblings);
+              }
+            }}
+            title={isCollapsed ? item.label : undefined}
             className="w-full flex items-center gap-2 rounded-lg transition-colors"
             style={{
               padding: isTopLevel ? "8px 10px" : "6px 10px",
+              justifyContent: isCollapsed ? "center" : "flex-start",
               color: active ? "var(--sidebar-active-text)" : "var(--sidebar-text)",
               background: active && !isTopLevel ? "var(--sidebar-active-bg)" : "transparent",
             }}
@@ -307,21 +327,25 @@ export function Sidebar({ unreadCount = 0, brand }: { unreadCount?: number; bran
               <Dot active={active} />
             )}
 
-            {/* Label */}
-            <span
-              className="flex-1 text-left truncate"
-              style={{ fontSize: isTopLevel ? "0.8125rem" : "0.75rem", fontWeight: 500 }}
-            >
-              {item.label}
-            </span>
+            {!isCollapsed && (
+              <>
+                {/* Label */}
+                <span
+                  className="flex-1 text-left truncate"
+                  style={{ fontSize: isTopLevel ? "0.8125rem" : "0.75rem", fontWeight: 500 }}
+                >
+                  {item.label}
+                </span>
 
-            {/* Chevron */}
-            <Chevron open={isOpen} size={isTopLevel ? 15 : 13} />
+                {/* Chevron */}
+                <Chevron open={isOpen} size={isTopLevel ? 15 : 13} />
+              </>
+            )}
           </button>
 
-          {isOpen && (
+          {isOpen && !isCollapsed && (
             <div style={{ paddingLeft: isTopLevel ? 22 : 14, paddingTop: 2, paddingBottom: 2 }}>
-              {item.children.map(child => renderItem(child, depth + 1, item.children!))}
+              {item.children.map(child => renderItem(child, depth + 1, item.children!, isCollapsed))}
             </div>
           )}
         </div>
@@ -335,9 +359,11 @@ export function Sidebar({ unreadCount = 0, brand }: { unreadCount?: number; bran
         key={item.href || item.label}
         href={item.href!}
         onClick={() => setMobileOpen(false)}
-        className="flex items-center gap-2 rounded-lg transition-colors"
+        title={isCollapsed ? item.label : undefined}
+        className="relative flex items-center gap-2 rounded-lg transition-colors"
         style={{
           padding: depth === 0 ? "8px 10px" : "6px 10px",
+          justifyContent: isCollapsed ? "center" : "flex-start",
           color: active ? "var(--sidebar-active-text)" : "var(--sidebar-text)",
           background: active ? "var(--sidebar-active-bg)" : "transparent",
         }}
@@ -357,34 +383,43 @@ export function Sidebar({ unreadCount = 0, brand }: { unreadCount?: number; bran
           <Dot active={active} />
         )}
 
-        {/* Label */}
-        <span
-          className="flex-1 truncate"
-          style={{ fontSize: depth === 0 ? "0.8125rem" : "0.75rem", fontWeight: 500 }}
-        >
-          {item.label}
-        </span>
+        {!isCollapsed && (
+          /* Label */
+          <span
+            className="flex-1 truncate"
+            style={{ fontSize: depth === 0 ? "0.8125rem" : "0.75rem", fontWeight: 500 }}
+          >
+            {item.label}
+          </span>
+        )}
 
         {/* Notification badge */}
         {isNotif && unreadCount > 0 && (
-          <span
-            className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold rounded-full shrink-0"
-            style={{
-              background: active ? "rgba(255,255,255,0.25)" : "#ba1a1a",
-              color: "#ffffff",
-            }}
-          >
-            {unreadCount > 99 ? "99+" : unreadCount}
-          </span>
+          isCollapsed ? (
+            <span
+              className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full"
+              style={{ background: "#ba1a1a" }}
+            />
+          ) : (
+            <span
+              className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold rounded-full shrink-0"
+              style={{
+                background: active ? "rgba(255,255,255,0.25)" : "#ba1a1a",
+                color: "#ffffff",
+              }}
+            >
+              {unreadCount > 99 ? "99+" : unreadCount}
+            </span>
+          )
         )}
       </Link>
     );
   };
 
-  const SidebarContent = () => (
+  const SidebarContent = ({ isCollapsed, showToggle }: { isCollapsed: boolean; showToggle: boolean }) => (
     <div className="flex flex-col h-full" style={{ background: "var(--sidebar-bg)" }}>
       {/* Logo / Branding */}
-      <div className="h-16 flex items-center px-4 shrink-0">
+      <div className="h-16 flex items-center px-4 shrink-0" style={{ justifyContent: isCollapsed ? "center" : "flex-start" }}>
         <div className="flex items-center gap-3 min-w-0">
           <div
             className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
@@ -398,27 +433,50 @@ export function Sidebar({ unreadCount = 0, brand }: { unreadCount?: number; bran
               </svg>
             )}
           </div>
-          <div className="min-w-0">
-            <p className="truncate text-white font-display font-semibold text-sm leading-tight">
-              {brand.name}
-            </p>
-            <p style={{ color: "rgba(255,255,255,0.45)", fontSize: "0.625rem", letterSpacing: "0.08em" }} className="uppercase font-medium">
-              KPI Tizimi
-            </p>
-          </div>
+          {!isCollapsed && (
+            <div className="min-w-0">
+              <p className="truncate text-white font-display font-semibold text-sm leading-tight">
+                {brand.name}
+              </p>
+              <p style={{ color: "rgba(255,255,255,0.45)", fontSize: "0.625rem", letterSpacing: "0.08em" }} className="uppercase font-medium">
+                KPI Tizimi
+              </p>
+            </div>
+          )}
         </div>
       </div>
 
       {/* Nav Items */}
       <nav className="flex-1 overflow-y-auto px-2 py-2 space-y-0.5">
-        {items.map(item => renderItem(item, 0, items))}
+        {items.map(item => renderItem(item, 0, items, isCollapsed))}
       </nav>
 
-      {/* Footer: email */}
-      <div className="px-4 py-3 shrink-0" style={{ borderTop: "1px solid rgba(255,255,255,0.08)" }}>
-        <p className="text-xs truncate font-medium" style={{ color: "rgba(255,255,255,0.4)" }}>
-          {user.email}
-        </p>
+      {/* Footer */}
+      <div className="shrink-0" style={{ borderTop: "1px solid rgba(255,255,255,0.08)" }}>
+        {showToggle && (
+          <button
+            onClick={onToggleCollapse}
+            title={isCollapsed ? "Yoyish" : "Yig'ish"}
+            className="w-full flex items-center gap-2 px-4 py-3 transition-colors"
+            style={{ color: "rgba(255,255,255,0.6)", justifyContent: isCollapsed ? "center" : "flex-start" }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "var(--sidebar-hover-bg)"; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+              {isCollapsed
+                ? <path d="M13 5l7 7-7 7M5 5l7 7-7 7" />     /* chevrons right »  */
+                : <path d="M11 19l-7-7 7-7M19 19l-7-7 7-7" />} {/* chevrons left  «  */}
+            </svg>
+            {!isCollapsed && <span className="text-xs font-medium">Yig&apos;ish</span>}
+          </button>
+        )}
+        {!isCollapsed && (
+          <div className="px-4 pb-3">
+            <p className="text-xs truncate font-medium" style={{ color: "rgba(255,255,255,0.4)" }}>
+              {user.email}
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -448,14 +506,19 @@ export function Sidebar({ unreadCount = 0, brand }: { unreadCount?: number; bran
         <div className="lg:hidden fixed inset-0 z-50 flex animate-fade-in">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setMobileOpen(false)} />
           <aside className="relative w-72 max-w-[85%] flex flex-col shadow-institutional-lg overflow-hidden">
-            <SidebarContent />
+            <SidebarContent isCollapsed={false} showToggle={false} />
           </aside>
         </div>
       )}
 
       {/* Desktop sidebar */}
-      <aside className="hidden lg:flex lg:flex-col lg:fixed lg:inset-y-0 lg:left-0 lg:w-64 overflow-hidden" style={{ zIndex: 40 }}>
-        <SidebarContent />
+      <aside
+        className={`hidden lg:flex lg:flex-col lg:fixed lg:inset-y-0 lg:left-0 overflow-hidden transition-[width] duration-200 ${
+          collapsed ? "lg:w-20" : "lg:w-64"
+        }`}
+        style={{ zIndex: 40 }}
+      >
+        <SidebarContent isCollapsed={collapsed} showToggle={true} />
       </aside>
     </>
   );
