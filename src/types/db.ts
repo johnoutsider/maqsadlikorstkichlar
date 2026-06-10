@@ -109,6 +109,8 @@ export interface Indicator {
   order_idx: number;
   is_sub_indicator: boolean;
   parent_id: string | null;
+  min_pages: number | null;
+  max_pages: number | null;
   created_at: string;
 }
 

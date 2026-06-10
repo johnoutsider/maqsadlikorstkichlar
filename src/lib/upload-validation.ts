@@ -71,6 +71,29 @@ export function validateFile(file: Pick<File, "name" | "size" | "type">, rule: U
   return null;
 }
 
+export function isPdf(file: Pick<File, "name" | "type">): boolean {
+  return file.name.toLowerCase().endsWith(".pdf") || file.type === "application/pdf";
+}
+
+export async function getPdfPageCount(file: File): Promise<number> {
+  const { PDFDocument } = await import("pdf-lib");
+  const bytes = await file.arrayBuffer();
+  const doc = await PDFDocument.load(bytes, { updateMetadata: false });
+  return doc.getPageCount();
+}
+
+export function validatePageRange(pages: number, min: number | null, max: number | null): string | null {
+  if (min !== null && pages < min) {
+    const maxStr = max !== null ? String(max) : "∞";
+    return `Fayl ${pages} betdan iborat. Ruxsat etilgan: ${min}–${maxStr} bet.`;
+  }
+  if (max !== null && pages > max) {
+    const minStr = min !== null ? String(min) : "1";
+    return `Fayl ${pages} betdan iborat. Ruxsat etilgan: ${minStr}–${max} bet.`;
+  }
+  return null;
+}
+
 export function safeStorageFileName(name: string) {
   const trimmed = name.trim() || "file";
   return trimmed.replace(/[^\w.-]+/g, "_").replace(/^_+/, "").slice(0, 120) || "file";

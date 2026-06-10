@@ -36,13 +36,21 @@ export default function TargetsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  // Load faculties + indicators + all departments once
+  // Load faculties + indicators + departments once.
+  // Deans fetch only their own faculty and its departments so the selector
+  // can never enumerate other faculties even with client-side manipulation.
   useEffect(() => {
     if (!user?.university_id) return;
     (async () => {
+      const facQuery = isDean && user.faculty_id
+        ? supabase.from("faculties").select("*").eq("id", user.faculty_id)
+        : supabase.from("faculties").select("*").eq("university_id", user.university_id).order("short_code");
+      const deptQuery = isDean && user.faculty_id
+        ? supabase.from("departments").select("*").eq("faculty_id", user.faculty_id).order("short_code")
+        : supabase.from("departments").select("*").eq("university_id", user.university_id).order("short_code");
       const [f, d, i] = await Promise.all([
-        supabase.from("faculties").select("*").eq("university_id", user.university_id).order("short_code"),
-        supabase.from("departments").select("*").eq("university_id", user.university_id).order("short_code"),
+        facQuery,
+        deptQuery,
         supabase.from("indicators").select("*").eq("university_id", user.university_id).order("order_idx"),
       ]);
       const facs = (f.data as Faculty[]) ?? [];

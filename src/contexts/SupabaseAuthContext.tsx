@@ -132,9 +132,13 @@ export function SupabaseAuthProvider({ children }: { children: React.ReactNode }
         });
       }
 
-      // Force Next.js to invalidate its server-component cache so the
-      // layout re-renders with the latest cookie-based session state.
-      if (event === "SIGNED_IN" || event === "SIGNED_OUT") {
+      // On sign-out, refresh server components so protected layouts
+      // re-run their auth checks and redirect to /login.
+      // On sign-in we do NOT refresh here — the login page already calls
+      // router.push() which triggers a full navigation with the new cookie.
+      // Calling router.refresh() on SIGNED_IN races against cookie propagation
+      // and causes the server layout to see an empty session → redirect loop.
+      if (event === "SIGNED_OUT") {
         router.refresh();
       }
     });

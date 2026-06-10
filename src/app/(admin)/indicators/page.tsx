@@ -23,6 +23,8 @@ export default function IndicatorsPage() {
   const [unit, setUnit] = useState("");
   const [isSub, setIsSub] = useState(false);
   const [parentId, setParentId] = useState<string>("");
+  const [minPages, setMinPages] = useState("");
+  const [maxPages, setMaxPages] = useState("");
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
 
@@ -92,6 +94,8 @@ export default function IndicatorsPage() {
     setUnit("");
     setIsSub(false);
     setParentId("");
+    setMinPages("");
+    setMaxPages("");
     setFormError("");
     setModalOpen(true);
   };
@@ -103,6 +107,8 @@ export default function IndicatorsPage() {
     setUnit(i.unit);
     setIsSub(i.is_sub_indicator);
     setParentId(i.parent_id ?? "");
+    setMinPages(i.min_pages !== null ? String(i.min_pages) : "");
+    setMaxPages(i.max_pages !== null ? String(i.max_pages) : "");
     setFormError("");
     setModalOpen(true);
   };
@@ -124,6 +130,24 @@ export default function IndicatorsPage() {
       ? editing.order_idx
       : rows.length > 0 ? Math.max(...rows.map((r) => r.order_idx)) + 1 : 1;
 
+    const parsedMin = minPages.trim() !== "" ? parseInt(minPages, 10) : null;
+    const parsedMax = maxPages.trim() !== "" ? parseInt(maxPages, 10) : null;
+    if (parsedMin !== null && (isNaN(parsedMin) || parsedMin < 1)) {
+      setFormError("Eng kam bet 1 yoki undan katta son bo'lishi kerak.");
+      setSaving(false);
+      return;
+    }
+    if (parsedMax !== null && (isNaN(parsedMax) || parsedMax < 1)) {
+      setFormError("Eng ko'p bet 1 yoki undan katta son bo'lishi kerak.");
+      setSaving(false);
+      return;
+    }
+    if (parsedMin !== null && parsedMax !== null && parsedMin > parsedMax) {
+      setFormError("Eng kam bet eng ko'p betdan katta bo'lmasligi kerak.");
+      setSaving(false);
+      return;
+    }
+
     const payload = {
       no: no.trim(),
       name: name.trim(),
@@ -132,6 +156,8 @@ export default function IndicatorsPage() {
       is_sub_indicator: isSub,
       parent_id: isSub ? parentId : null,
       university_id: user.university_id,
+      min_pages: parsedMin,
+      max_pages: parsedMax,
     };
     const { error: e2 } = editing
       ? await supabase.from("indicators").update(payload).eq("id", editing.id)
@@ -231,15 +257,22 @@ export default function IndicatorsPage() {
                     </td>
                     <td className="px-4 py-3 text-sm text-surface-500">{ind.unit}</td>
                     <td className="px-4 py-3 text-xs text-surface-500">
-                      {isParent ? (
-                        <span className="text-primary-600 dark:text-primary-400 font-medium">Asosiy</span>
-                      ) : ind.is_sub_indicator ? (
-                        <span className="text-surface-400">
-                          Sub {parentLabel ? `(${parentLabel})` : ""}
-                        </span>
-                      ) : (
-                        <span className="text-surface-400">Oddiy</span>
-                      )}
+                      <div className="flex flex-col gap-1">
+                        {isParent ? (
+                          <span className="text-primary-600 dark:text-primary-400 font-medium">Asosiy</span>
+                        ) : ind.is_sub_indicator ? (
+                          <span className="text-surface-400">
+                            Sub {parentLabel ? `(${parentLabel})` : ""}
+                          </span>
+                        ) : (
+                          <span className="text-surface-400">Oddiy</span>
+                        )}
+                        {(ind.min_pages !== null || ind.max_pages !== null) && (
+                          <span className="inline-block px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300 text-[10px] font-medium">
+                            PDF: {ind.min_pages ?? 1}–{ind.max_pages ?? "∞"} bet
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-4 py-3 text-right space-x-2">
                       <Button variant="outline" size="sm" onClick={() => openEdit(ind)}>Tahrirlash</Button>
@@ -263,6 +296,31 @@ export default function IndicatorsPage() {
             <Input label="Birlik" value={unit} onChange={(e) => setUnit(e.target.value)} placeholder="%, nafar, dona" required />
           </div>
           <Input label="Nomi" value={name} onChange={(e) => setName(e.target.value)} required />
+
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-sm font-medium text-surface-700 dark:text-surface-300">PDF sahifa chegarasi</span>
+              <span className="text-xs text-surface-400">(ixtiyoriy — faqat PDF fayllarga taalluqli)</span>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <Input
+                label="Eng kam bet"
+                type="number"
+                min={1}
+                value={minPages}
+                onChange={(e) => setMinPages(e.target.value)}
+                placeholder="Bo'sh = cheksiz"
+              />
+              <Input
+                label="Eng ko'p bet"
+                type="number"
+                min={1}
+                value={maxPages}
+                onChange={(e) => setMaxPages(e.target.value)}
+                placeholder="Bo'sh = cheksiz"
+              />
+            </div>
+          </div>
 
           <label className="flex items-center gap-2 text-sm cursor-pointer">
             <input

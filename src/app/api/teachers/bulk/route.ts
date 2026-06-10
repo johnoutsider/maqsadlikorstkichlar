@@ -335,8 +335,9 @@ export async function POST(req: Request) {
       existingMap.set(dupKey, existingId); // already there, no-op — prevents within-file dups
       results.push({ row: rowNum, name: rawName, status: "updated" });
     } else {
-      // INSERT new teacher
-      const { error: dbErr } = await admin.from("teachers").insert({
+      // INSERT new teacher — upsert on the unique index to handle any
+      // duplicates already in the DB that the in-memory map missed.
+      const { data: inserted, error: dbErr } = await admin.from("teachers").upsert({
         university_id:   callerRole === "super_admin" ? null : callerUniversityId,
         faculty_id:      facultyId,
         department_id:   deptId,
@@ -354,9 +355,13 @@ export async function POST(req: Request) {
         ilmiy_daraja,
         faoliyat_holati: "faol",
         created_by:      authUser.id,
-      });
+      }, {
+        onConflict: "university_id,department_id,lower(last_name),lower(first_name),lower(coalesce(middle_name,''))",
+        ignoreDuplicates: false,
+      }).select("id").maybeSingle();
       if (dbErr) { fail(dbErr.message); continue; }
-      existingMap.set(dupKey, "new"); // prevent within-file duplicates
+      const newId = (inserted as { id: string } | null)?.id ?? "new";
+      existingMap.set(dupKey, newId); // prevent within-file duplicates
       results.push({ row: rowNum, name: rawName, status: "success" });
     }
   }

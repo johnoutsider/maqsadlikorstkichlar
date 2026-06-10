@@ -22,6 +22,9 @@ import {
   acceptAttribute,
   safeStorageFileName,
   validateFile,
+  isPdf,
+  getPdfPageCount,
+  validatePageRange,
 } from "@/lib/upload-validation";
 
 const QUARTERS: Quarter[] = ["Q1", "Q2", "Q3", "Q4"];
@@ -60,6 +63,7 @@ export default function FormPage() {
   const [loading, setLoading] = useState(true);
   const [busyAction, setBusyAction] = useState<"draft" | "submit" | null>(null);
   const [uploadingFor, setUploadingFor] = useState<string | null>(null);
+  const [uploadErrors, setUploadErrors] = useState<Record<string, string>>({});
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [reviewerMap, setReviewerMap] = useState<Map<string, string>>(new Map());
@@ -287,13 +291,33 @@ export default function FormPage() {
     load();
   };
 
+  const setUploadError = (indicatorId: string, msg: string) =>
+    setUploadErrors((prev) => ({ ...prev, [indicatorId]: msg }));
+  const clearUploadError = (indicatorId: string) =>
+    setUploadErrors((prev) => { const next = { ...prev }; delete next[indicatorId]; return next; });
+
   const uploadFile = async (indicatorId: string, file: File) => {
     if (!user?.university_id || !user?.department_id) return;
     setError("");
+    clearUploadError(indicatorId);
     const validationError = validateFile(file, SUBMISSION_FILE_RULE);
     if (validationError) {
       setError(validationError);
       return;
+    }
+    const ind = indicators.find((i) => i.id === indicatorId);
+    if (ind && isPdf(file) && (ind.min_pages !== null || ind.max_pages !== null)) {
+      try {
+        const pages = await getPdfPageCount(file);
+        const rangeError = validatePageRange(pages, ind.min_pages, ind.max_pages);
+        if (rangeError) {
+          setUploadError(indicatorId, rangeError);
+          return;
+        }
+      } catch {
+        setUploadError(indicatorId, "PDF faylni o'qib bo'lmadi. Fayl buzilgan bo'lishi mumkin.");
+        return;
+      }
     }
     setUploadingFor(indicatorId);
     const safeName = safeStorageFileName(file.name);
@@ -414,7 +438,7 @@ export default function FormPage() {
                 <th className="px-4 py-3 text-left text-xs font-semibold text-surface-600 uppercase w-24">Reja</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-surface-600 uppercase w-32">Amal</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-surface-600 uppercase w-20">Foizi</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-surface-600 uppercase">Tasdiqlovchi fayllar</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-surface-600 uppercase w-52">Tasdiqlovchi fayllar</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-surface-200 dark:divide-surface-700">
@@ -466,15 +490,15 @@ export default function FormPage() {
                     <td className="px-4 py-3 text-sm font-medium text-surface-900 dark:text-surface-100">
                       {foiz}
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3 w-52 max-w-52">
                       <div className="space-y-1">
                         {f.map((p) => (
-                          <div key={p} className="flex items-center gap-2 text-xs">
+                          <div key={p} className="flex items-center gap-2 text-xs min-w-0">
                             <button
                               type="button"
                               onClick={() => openFile(p)}
-                              className="text-primary-600 hover:underline truncate"
-                              title={p}
+                              className="text-primary-600 hover:underline truncate min-w-0"
+                              title={p.split("/").pop()?.replace(/^\d+_/, "")}
                             >
                               {p.split("/").pop()?.replace(/^\d+_/, "")}
                             </button>
@@ -490,21 +514,36 @@ export default function FormPage() {
                             )}
                           </div>
                         ))}
+                        {(ind.min_pages !== null || ind.max_pages !== null) && (
+                          <div className="text-[10px] text-surface-400 dark:text-surface-500">
+                            PDF: {ind.min_pages ?? 1}–{ind.max_pages ?? "∞"} bet
+                          </div>
+                        )}
                         {editable && (
-                          <label className="inline-block cursor-pointer text-xs text-primary-600 hover:underline">
-                            {uploadingFor === ind.id ? "Yuklanmoqda..." : "+ Fayl qo'shish"}
-                            <input
-                              type="file"
-                              accept={acceptAttribute(SUBMISSION_FILE_RULE)}
-                              className="hidden"
-                              disabled={uploadingFor === ind.id}
-                              onChange={(e) => {
-                                const file = e.target.files?.[0];
-                                if (file) uploadFile(ind.id, file);
-                                e.target.value = "";
-                              }}
-                            />
-                          </label>
+                          <>
+                            <label className="inline-block cursor-pointer text-xs text-primary-600 hover:underline">
+                              {uploadingFor === ind.id ? "Yuklanmoqda..." : "+ Fayl qo'shish"}
+                              <input
+                                type="file"
+                                accept={acceptAttribute(SUBMISSION_FILE_RULE)}
+                                className="hidden"
+                                disabled={uploadingFor === ind.id}
+                                onChange={(e) => {
+                                  const file = e.target.files?.[0];
+                                  if (file) uploadFile(ind.id, file);
+                                  e.target.value = "";
+                                }}
+                              />
+                            </label>
+                            {uploadErrors[ind.id] && (
+                              <div className="mt-1 flex items-start gap-1.5 rounded-md bg-danger-50 dark:bg-danger-900/30 border border-danger-200 dark:border-danger-700 px-2 py-1.5 text-xs text-danger-700 dark:text-danger-400">
+                                <svg className="w-3.5 h-3.5 mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                                </svg>
+                                <span>{uploadErrors[ind.id]}</span>
+                              </div>
+                            )}
+                          </>
                         )}
                       </div>
                     </td>
