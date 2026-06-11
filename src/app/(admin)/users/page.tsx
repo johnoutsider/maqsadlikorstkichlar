@@ -49,6 +49,7 @@ export default function UsersPage() {
   const [error, setError] = useState("");
 
   const [modalOpen, setModalOpen] = useState(false);
+  const [editingUser, setEditingUser] = useState<Row | null>(null);
   const [displayName, setDisplayName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -111,8 +112,25 @@ export default function UsersPage() {
     () => departments.filter((d) => d.faculty_id === facultyId),
     [departments, facultyId]
   );
+  const assignedName = useCallback(
+    (r: Row) => {
+      if (r.department_id) {
+        const department = depById.get(r.department_id);
+        return department?.name ?? department?.short_code ?? "?";
+      }
+
+      if (r.faculty_id) {
+        const faculty = facById.get(r.faculty_id);
+        return faculty?.name ?? faculty?.short_code ?? "?";
+      }
+
+      return "-";
+    },
+    [depById, facById]
+  );
 
   const openCreate = () => {
+    setEditingUser(null);
     setDisplayName("");
     setEmail("");
     setPassword("");
@@ -123,11 +141,28 @@ export default function UsersPage() {
     setModalOpen(true);
   };
 
+  const openEdit = (r: Row) => {
+    setEditingUser(r);
+    setDisplayName(r.display_name);
+    setEmail(r.email);
+    setPassword("");
+    setRole(r.role_name);
+    setFacultyId(r.faculty_id ?? "");
+    setDepartmentId(r.department_id ?? "");
+    setFormError("");
+    setModalOpen(true);
+  };
+
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError("");
 
-    if (password.length < 8) {
+    if (!editingUser && password.length < 8) {
+      setFormError("Parol kamida 8 ta belgidan iborat bo'lishi kerak.");
+      return;
+    }
+
+    if (editingUser && password && password.length < 8) {
       setFormError("Parol kamida 8 ta belgidan iborat bo'lishi kerak.");
       return;
     }
@@ -143,17 +178,18 @@ export default function UsersPage() {
     }
 
     setSaving(true);
+    const payload = {
+      email: email.trim(),
+      password: password || undefined,
+      display_name: displayName.trim(),
+      role,
+      faculty_id: facultyId || null,
+      department_id: departmentId || null,
+    };
     const res = await fetch("/api/users", {
-      method: "POST",
+      method: editingUser ? "PATCH" : "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        email: email.trim(),
-        password,
-        display_name: displayName.trim(),
-        role,
-        faculty_id: facultyId || null,
-        department_id: departmentId || null,
-      }),
+      body: JSON.stringify(editingUser ? { ...payload, id: editingUser.id } : payload),
     });
     setSaving(false);
 
@@ -164,24 +200,35 @@ export default function UsersPage() {
     }
 
     setModalOpen(false);
+    setEditingUser(null);
     load();
   };
 
   const remove = async (r: Row) => {
     if (r.id === user?.id) {
       alert("O'zingizni o'chira olmaysiz.");
-      return;
+      return false;
     }
-    if (!confirm(`"${r.display_name}" foydalanuvchisini o'chirishni tasdiqlaysizmi?`)) return;
+    if (!confirm(`"${r.display_name}" foydalanuvchisini o'chirishni tasdiqlaysizmi?`)) return false;
 
     const res = await fetch(`/api/users?id=${r.id}`, { method: "DELETE" });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       alert(data?.error ?? `HTTP ${res.status}`);
-      return;
+      return false;
     }
 
     load();
+    return true;
+  };
+
+  const deleteEditingUser = async () => {
+    if (!editingUser) return;
+    const deleted = await remove(editingUser);
+    if (deleted) {
+      setModalOpen(false);
+      setEditingUser(null);
+    }
   };
 
   const handleBulkUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -280,15 +327,11 @@ export default function UsersPage() {
                   <td className="px-4 py-3 font-mono text-sm text-surface-700 dark:text-surface-300">{r.email}</td>
                   <td className="px-4 py-3 text-sm">{ROLE_LABEL[r.role_name] ?? r.role_name}</td>
                   <td className="px-4 py-3 text-sm text-surface-500">
-                    {r.department_id
-                      ? `${facById.get(depById.get(r.department_id)?.faculty_id ?? "")?.short_code ?? "?"} / ${depById.get(r.department_id)?.short_code ?? "?"}`
-                      : r.faculty_id
-                        ? facById.get(r.faculty_id)?.short_code ?? "?"
-                        : "-"}
+                    {assignedName(r)}
                   </td>
                   <td className="px-4 py-3 text-right">
-                    <Button variant="danger" size="sm" onClick={() => remove(r)}>
-                      O&apos;chirish
+                    <Button variant="outline" size="sm" onClick={() => openEdit(r)}>
+                      Tahrirlash
                     </Button>
                   </td>
                 </tr>
@@ -344,7 +387,14 @@ export default function UsersPage() {
         </div>
       </Modal>
 
-      <Modal isOpen={modalOpen} onClose={() => setModalOpen(false)} title="Yangi foydalanuvchi">
+      <Modal
+        isOpen={modalOpen}
+        onClose={() => {
+          setModalOpen(false);
+          setEditingUser(null);
+        }}
+        title={editingUser ? "Foydalanuvchini tahrirlash" : "Yangi foydalanuvchi"}
+      >
         <form onSubmit={save} className="space-y-4">
           {formError && (
             <div className="rounded-lg bg-danger-50 p-3 text-sm text-danger-600 dark:bg-danger-900/30 dark:text-danger-400">
@@ -354,12 +404,12 @@ export default function UsersPage() {
           <Input label="To'liq ism" value={displayName} onChange={(e) => setDisplayName(e.target.value)} required />
           <Input label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="off" />
           <Input
-            label="Vaqtinchalik parol (kamida 8 ta belgi)"
+            label={editingUser ? "Yangi parol (ixtiyoriy)" : "Vaqtinchalik parol (kamida 8 ta belgi)"}
             type="text"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             minLength={8}
-            required
+            required={!editingUser}
             autoComplete="new-password"
           />
 
@@ -423,13 +473,29 @@ export default function UsersPage() {
             </div>
           )}
 
-          <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="outline" onClick={() => setModalOpen(false)}>
-              Bekor qilish
-            </Button>
-            <Button type="submit" isLoading={saving}>
-              Yaratish
-            </Button>
+          <div className="flex justify-between gap-2 pt-2">
+            <div>
+              {editingUser && editingUser.id !== user?.id && (
+                <Button type="button" variant="danger" onClick={deleteEditingUser}>
+                  O&apos;chirish
+                </Button>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setModalOpen(false);
+                  setEditingUser(null);
+                }}
+              >
+                Bekor qilish
+              </Button>
+              <Button type="submit" isLoading={saving}>
+                {editingUser ? "Saqlash" : "Yaratish"}
+              </Button>
+            </div>
           </div>
         </form>
       </Modal>

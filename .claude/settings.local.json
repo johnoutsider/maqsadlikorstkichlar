@@ -32,7 +32,10 @@
       "Bash(git push *)",
       "Read(//c/Users/Jakhongir Khasanov/.claude/skills/notebooklm/**)",
       "Bash(python scripts/run.py auth_manager.py status)",
-      "PowerShell(cd \"C:\\\\Users\\\\Jakhongir Khasanov\\\\.claude\\\\skills\\\\notebooklm\"; $env:PYTHONIOENCODING=\"utf-8\"; python scripts/run.py auth_manager.py status)"
+      "PowerShell(cd \"C:\\\\Users\\\\Jakhongir Khasanov\\\\.claude\\\\skills\\\\notebooklm\"; $env:PYTHONIOENCODING=\"utf-8\"; python scripts/run.py auth_manager.py status)",
+      "Bash(Get-ChildItem -Path \"D:\\\\Coding\\\\Antigravity folder\\\\maqsadlikorstkichlar\" -Force)",
+      "Bash(Select-Object Name, PSIsContainer)",
+      "Bash(xargs grep -l \"submission\")"
     ]
   }
 }
