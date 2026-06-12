@@ -18,13 +18,13 @@ import {
 } from "@/lib/workflow";
 import { buildReviewSummaryEntries, normalizeSubmission } from "@/lib/submission";
 import {
-  SUBMISSION_FILE_RULE,
   acceptAttribute,
   safeStorageFileName,
   validateFile,
   isPdf,
   getPdfPageCount,
   validatePageRange,
+  submissionFileRule,
 } from "@/lib/upload-validation";
 
 const QUARTERS: Quarter[] = ["Q1", "Q2", "Q3", "Q4"];
@@ -300,13 +300,15 @@ export default function FormPage() {
     if (!user?.university_id || !user?.department_id) return;
     setError("");
     clearUploadError(indicatorId);
-    const validationError = validateFile(file, SUBMISSION_FILE_RULE);
+    const ind = indicators.find((i) => i.id === indicatorId);
+    if (!ind) return;
+    const fileRule = submissionFileRule(ind.allowed_file_extensions);
+    const validationError = validateFile(file, fileRule);
     if (validationError) {
-      setError(validationError);
+      setUploadError(indicatorId, validationError);
       return;
     }
-    const ind = indicators.find((i) => i.id === indicatorId);
-    if (ind && isPdf(file) && (ind.min_pages !== null || ind.max_pages !== null)) {
+    if (isPdf(file) && (ind.min_pages !== null || ind.max_pages !== null)) {
       try {
         const pages = await getPdfPageCount(file);
         const rangeError = validatePageRange(pages, ind.min_pages, ind.max_pages);
@@ -444,6 +446,7 @@ export default function FormPage() {
             <tbody className="divide-y divide-surface-200 dark:divide-surface-700">
               {indicators.map((ind) => {
                 const f = files[ind.id] ?? [];
+                const fileRule = submissionFileRule(ind.allowed_file_extensions);
                 const maqsad = target?.values?.[ind.id] ?? null;
                 const parseNum = (v: string) => { const n = Number(v); return isNaN(n) ? 0 : n; };
                 const qiymat = values[ind.id] ? parseNum(values[ind.id]) : null;
@@ -525,7 +528,7 @@ export default function FormPage() {
                               {uploadingFor === ind.id ? "Yuklanmoqda..." : "+ Fayl qo'shish"}
                               <input
                                 type="file"
-                                accept={acceptAttribute(SUBMISSION_FILE_RULE)}
+                                accept={acceptAttribute(fileRule)}
                                 className="hidden"
                                 disabled={uploadingFor === ind.id}
                                 onChange={(e) => {
@@ -535,6 +538,9 @@ export default function FormPage() {
                                 }}
                               />
                             </label>
+                            <div className="text-[10px] text-surface-400 dark:text-surface-500">
+                              Ruxsat: {fileRule.label}. Maksimal hajm: 10 MB.
+                            </div>
                             {uploadErrors[ind.id] && (
                               <div className="mt-1 flex items-start gap-1.5 rounded-md bg-danger-50 dark:bg-danger-900/30 border border-danger-200 dark:border-danger-700 px-2 py-1.5 text-xs text-danger-700 dark:text-danger-400">
                                 <svg className="w-3.5 h-3.5 mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
