@@ -7,6 +7,10 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
 import type { Indicator } from "@/types/db";
+import {
+  DEFAULT_SUBMISSION_FILE_EXTENSIONS,
+  SUBMISSION_FILE_FORMATS,
+} from "@/lib/upload-validation";
 
 export default function IndicatorsPage() {
   const supabase = createClient();
@@ -25,6 +29,9 @@ export default function IndicatorsPage() {
   const [parentId, setParentId] = useState<string>("");
   const [minPages, setMinPages] = useState("");
   const [maxPages, setMaxPages] = useState("");
+  const [allowedFileExtensions, setAllowedFileExtensions] = useState<string[]>(
+    DEFAULT_SUBMISSION_FILE_EXTENSIONS
+  );
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
 
@@ -96,6 +103,7 @@ export default function IndicatorsPage() {
     setParentId("");
     setMinPages("");
     setMaxPages("");
+    setAllowedFileExtensions(DEFAULT_SUBMISSION_FILE_EXTENSIONS);
     setFormError("");
     setModalOpen(true);
   };
@@ -109,6 +117,11 @@ export default function IndicatorsPage() {
     setParentId(i.parent_id ?? "");
     setMinPages(i.min_pages !== null ? String(i.min_pages) : "");
     setMaxPages(i.max_pages !== null ? String(i.max_pages) : "");
+    setAllowedFileExtensions(
+      i.allowed_file_extensions?.length
+        ? i.allowed_file_extensions
+        : DEFAULT_SUBMISSION_FILE_EXTENSIONS
+    );
     setFormError("");
     setModalOpen(true);
   };
@@ -123,6 +136,10 @@ export default function IndicatorsPage() {
     }
     if (isSub && !parentId) {
       setFormError("Sub-ko'rsatkich uchun asosiy ko'rsatkichni tanlang.");
+      return;
+    }
+    if (allowedFileExtensions.length === 0) {
+      setFormError("Kamida bitta fayl formatini tanlang.");
       return;
     }
     setSaving(true);
@@ -158,6 +175,7 @@ export default function IndicatorsPage() {
       university_id: user.university_id,
       min_pages: parsedMin,
       max_pages: parsedMax,
+      allowed_file_extensions: allowedFileExtensions,
     };
     const { error: e2 } = editing
       ? await supabase.from("indicators").update(payload).eq("id", editing.id)
@@ -212,6 +230,7 @@ export default function IndicatorsPage() {
                 <th className="px-4 py-3 text-left text-xs font-semibold text-surface-600 uppercase">Nom</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-surface-600 uppercase w-24">Birlik</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-surface-600 uppercase w-28">Turi</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-surface-600 uppercase w-52">Fayl formatlari</th>
                 <th className="px-4 py-3" />
               </tr>
             </thead>
@@ -274,6 +293,21 @@ export default function IndicatorsPage() {
                         )}
                       </div>
                     </td>
+                    <td className="px-4 py-3 text-xs text-surface-500">
+                      <div className="flex flex-wrap gap-1">
+                        {(ind.allowed_file_extensions?.length
+                          ? ind.allowed_file_extensions
+                          : DEFAULT_SUBMISSION_FILE_EXTENSIONS
+                        ).map((extension) => (
+                          <span
+                            key={extension}
+                            className="rounded bg-surface-100 dark:bg-surface-700 px-1.5 py-0.5 font-mono text-[10px]"
+                          >
+                            .{extension}
+                          </span>
+                        ))}
+                      </div>
+                    </td>
                     <td className="px-4 py-3 text-right space-x-2">
                       <Button variant="outline" size="sm" onClick={() => openEdit(ind)}>Tahrirlash</Button>
                       <Button variant="danger" size="sm" onClick={() => remove(ind)}>O&apos;chirish</Button>
@@ -296,6 +330,39 @@ export default function IndicatorsPage() {
             <Input label="Birlik" value={unit} onChange={(e) => setUnit(e.target.value)} placeholder="%, nafar, dona" required />
           </div>
           <Input label="Nomi" value={name} onChange={(e) => setName(e.target.value)} required />
+
+          <div>
+            <div className="mb-2">
+              <span className="text-sm font-medium text-surface-700 dark:text-surface-300">
+                Ruxsat etilgan fayl formatlari
+              </span>
+              <p className="mt-0.5 text-xs text-surface-400">
+                Xodim faqat tanlangan formatlarni yuklay oladi. Maksimal hajm: 10 MB.
+              </p>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 rounded-md border border-surface-200 dark:border-surface-700 p-3">
+              {SUBMISSION_FILE_FORMATS.map((format) => (
+                <label
+                  key={format.extension}
+                  className="flex items-center gap-2 text-sm cursor-pointer"
+                >
+                  <input
+                    type="checkbox"
+                    checked={allowedFileExtensions.includes(format.extension)}
+                    onChange={(e) => {
+                      setAllowedFileExtensions((current) =>
+                        e.target.checked
+                          ? [...current, format.extension]
+                          : current.filter((extension) => extension !== format.extension)
+                      );
+                    }}
+                  />
+                  <span>{format.label}</span>
+                  <span className="text-xs text-surface-400">.{format.extension}</span>
+                </label>
+              ))}
+            </div>
+          </div>
 
           <div>
             <div className="flex items-center gap-2 mb-1">

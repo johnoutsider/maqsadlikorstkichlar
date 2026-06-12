@@ -111,6 +111,7 @@ export interface Indicator {
   parent_id: string | null;
   min_pages: number | null;
   max_pages: number | null;
+  allowed_file_extensions: string[];
   created_at: string;
 }
 
