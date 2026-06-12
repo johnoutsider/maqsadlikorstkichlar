@@ -326,7 +326,7 @@ export default function FormPage() {
     const path = `${user.university_id}/${year}/${quarter}/${user.department_id}/${indicatorId}/${Date.now()}_${safeName}`;
     const { error: e } = await supabase.storage.from("submissions").upload(path, file);
     setUploadingFor(null);
-    if (e) { setError(e.message); return; }
+    if (e) { setUploadError(indicatorId, e.message); return; }
     setFiles((prev) => ({ ...prev, [indicatorId]: [...(prev[indicatorId] ?? []), path] }));
   };
 

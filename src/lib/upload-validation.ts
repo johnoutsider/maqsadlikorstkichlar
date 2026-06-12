@@ -163,5 +163,12 @@ export function validatePageRange(pages: number, min: number | null, max: number
 
 export function safeStorageFileName(name: string) {
   const trimmed = name.trim() || "file";
-  return trimmed.replace(/[^\w.-]+/g, "_").replace(/^_+/, "").slice(0, 120) || "file";
+  const sanitized = trimmed.replace(/[^\w.-]+/g, "_").replace(/^_+/, "") || "file";
+  if (sanitized.length <= 120) return sanitized;
+
+  const extensionStart = sanitized.lastIndexOf(".");
+  const extension = extensionStart > 0 ? sanitized.slice(extensionStart) : "";
+  if (!extension || extension.length > 20) return sanitized.slice(0, 120);
+
+  return `${sanitized.slice(0, 120 - extension.length)}${extension}`;
 }
