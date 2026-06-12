@@ -50,6 +50,7 @@ export default function SubmissionDetailPage() {
   const [comments, setComments] = useState<Record<string, string>>({});
   const [overallComment, setOverallComment] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [downloadingFor, setDownloadingFor] = useState<string | null>(null);
 
   // Router is unused but kept for parity with prior file; silence lint.
   void router;
@@ -137,10 +138,43 @@ export default function SubmissionDetailPage() {
     setComments(c);
   }, [canReview, submission, stage, indicators]);
 
-  const openFile = async (path: string) => {
-    const { data, error: e } = await supabase.storage.from("submissions").createSignedUrl(path, 60 * 10);
-    if (e || !data) { setError(e?.message ?? "Faylni ochib bo'lmadi"); return; }
-    window.open(data.signedUrl, "_blank");
+  const downloadIndicatorFiles = async (indicatorId: string) => {
+    if (!submission) return;
+    setError("");
+    setDownloadingFor(indicatorId);
+
+    try {
+      const response = await fetch(
+        `/api/submissions/${submission.id}/indicators/${indicatorId}/download`,
+        { cache: "no-store" }
+      );
+
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(payload?.error ?? "Fayllarni yuklab bo'lmadi.");
+      }
+
+      const blob = await response.blob();
+      const disposition = response.headers.get("content-disposition") ?? "";
+      const match = disposition.match(/filename="([^"]+)"/i);
+      const fileName = match?.[1] ?? `indicator-${indicatorId}.zip`;
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = fileName;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (downloadError) {
+      setError(
+        downloadError instanceof Error
+          ? downloadError.message
+          : "Fayllarni yuklab bo'lmadi."
+      );
+    } finally {
+      setDownloadingFor(null);
+    }
   };
 
   const finalize = async () => {
@@ -389,17 +423,19 @@ export default function SubmissionDetailPage() {
                       {(cell?.files ?? []).length === 0 ? (
                         <span className="text-xs text-surface-400">—</span>
                       ) : (
-                        (cell!.files).map((p) => (
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-surface-500">
+                            {cell!.files.length} ta fayl
+                          </span>
                           <button
-                            key={p}
                             type="button"
-                            onClick={() => openFile(p)}
-                            className="block text-xs text-primary-600 hover:underline truncate max-w-xs"
-                            title={p}
+                            onClick={() => downloadIndicatorFiles(ind.id)}
+                            disabled={downloadingFor === ind.id}
+                            className="inline-flex items-center rounded-md bg-primary-600 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-60"
                           >
-                            {p.split("/").pop()?.replace(/^\d+_/, "")}
+                            {downloadingFor === ind.id ? "Tayyorlanmoqda..." : "Yuklab olish"}
                           </button>
-                        ))
+                        </div>
                       )}
                     </div>
                   </td>
