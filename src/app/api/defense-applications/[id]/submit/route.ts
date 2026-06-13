@@ -19,6 +19,7 @@ export async function POST(req: Request, context: RouteContext) {
   const fullName = typeof body?.applicant_full_name === "string" ? body.applicant_full_name.trim() : "";
   const dissertationInfo = (body?.dissertation_info ?? {}) as Record<string, string>;
   const avtoreferatInfo = (body?.avtoreferat_info ?? {}) as Record<string, string>;
+  const departmentId = typeof body?.department_id === "string" ? body.department_id.trim() : "";
 
   const admin = createAdminClient();
   const { data: application, error: fetchError } = await admin
@@ -36,6 +37,15 @@ export async function POST(req: Request, context: RouteContext) {
     return bad("Telefon raqami Telegram orqali tasdiqlanmagan.", 422);
   }
   if (!fullName) return bad("F.I.Sh. kiritilishi shart.", 422);
+  if (!departmentId) return bad("Kafedra tanlanishi shart.", 422);
+
+  const { data: department } = await admin
+    .from("departments")
+    .select("id")
+    .eq("id", departmentId)
+    .eq("university_id", application.university_id)
+    .maybeSingle();
+  if (!department) return bad("Tanlangan kafedra topilmadi.", 422);
 
   for (const field of DISSERTATION_FIELDS) {
     if (field.required && !dissertationInfo[field.key]?.toString().trim()) {
@@ -61,6 +71,7 @@ export async function POST(req: Request, context: RouteContext) {
       applicant_full_name: fullName,
       dissertation_info: dissertationInfo,
       avtoreferat_info: avtoreferatInfo,
+      department_id: departmentId,
       status: "pending_science",
     })
     .eq("id", id);

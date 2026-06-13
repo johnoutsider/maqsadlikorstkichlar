@@ -21,6 +21,7 @@ type StatusResponse = {
   phone_verified: boolean;
   applicant_full_name: string | null;
   applicant_phone: string | null;
+  department_id: string | null;
   dissertation_info: Record<string, string>;
   avtoreferat_info: Record<string, string>;
   documents: Record<string, string[]>;
@@ -28,6 +29,8 @@ type StatusResponse = {
   science_comment: string | null;
   vice_rector_comment: string | null;
 };
+
+type DepartmentOption = { id: string; name: string };
 
 function fieldClassName(extra = "") {
   return `w-full rounded-lg outline-none transition-all ${extra}`;
@@ -118,6 +121,8 @@ export default function HimoyaArizasiPage() {
 
   const [dissertationInfo, setDissertationInfo] = useState<Record<string, string>>({});
   const [avtoreferatInfo, setAvtoreferatInfo] = useState<Record<string, string>>({});
+  const [departmentId, setDepartmentId] = useState("");
+  const [departments, setDepartments] = useState<DepartmentOption[]>([]);
   const [uploading, setUploading] = useState<string | null>(null);
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -137,6 +142,7 @@ export default function HimoyaArizasiPage() {
     setDissertationInfo(data.dissertation_info ?? {});
     setAvtoreferatInfo(data.avtoreferat_info ?? {});
     setFullName(data.applicant_full_name ?? "");
+    setDepartmentId(data.department_id ?? "");
 
     if (["pending_science", "pending_vice_rector", "approved", "rejected"].includes(data.status)) {
       setStep("done");
@@ -157,6 +163,13 @@ export default function HimoyaArizasiPage() {
       setLoading(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    fetch("/api/defense-applications/departments")
+      .then((res) => res.json())
+      .then((data) => setDepartments(data.departments ?? []))
+      .catch(() => setDepartments([]));
   }, []);
 
   useEffect(() => {
@@ -221,6 +234,10 @@ export default function HimoyaArizasiPage() {
   async function handleSubmit() {
     if (!applicationId) return;
     setError("");
+    if (!departmentId) {
+      setError("Kafedra tanlanishi shart.");
+      return;
+    }
     setSubmitting(true);
     try {
       const res = await fetch(`/api/defense-applications/${applicationId}/submit`, {
@@ -228,6 +245,7 @@ export default function HimoyaArizasiPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           applicant_full_name: fullName,
+          department_id: departmentId,
           dissertation_info: dissertationInfo,
           avtoreferat_info: avtoreferatInfo,
         }),
@@ -333,6 +351,28 @@ export default function HimoyaArizasiPage() {
 
         {step === "form" && status && (
           <>
+            <div className="rounded-3xl bg-[var(--surface-container-lowest)] p-6 shadow-[0_24px_60px_rgba(42,52,57,0.06)] sm:p-8">
+              <SectionTitle>Kafedra</SectionTitle>
+              <div className="space-y-1">
+                <label className="block mb-1.5 text-[0.8125rem] font-medium text-[var(--on-surface-variant)]">
+                  Kafedra / bo&apos;lim *
+                </label>
+                <select
+                  value={departmentId}
+                  onChange={(e) => setDepartmentId(e.target.value)}
+                  className={fieldClassName()}
+                  style={inputStyle}
+                >
+                  <option value="">Tanlang...</option>
+                  {departments.map((dept) => (
+                    <option key={dept.id} value={dept.id}>
+                      {dept.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
             <div className="rounded-3xl bg-[var(--surface-container-lowest)] p-6 shadow-[0_24px_60px_rgba(42,52,57,0.06)] sm:p-8">
               <SectionTitle>Dissertatsiya haqida ma&apos;lumot</SectionTitle>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
