@@ -180,6 +180,12 @@ const NAV: NavItem[] = [
     ]
   },
   {
+    href: "/himoya-arizalari",
+    label: "Himoya arizalari",
+    icon: <Icon d="M9 12h6m-6 4h6m-7 5h8a2 2 0 002-2V7.414a1 1 0 00-.293-.707l-3.414-3.414A1 1 0 0013.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />,
+    roles: ["science_department", "vice_rector"],
+  },
+  {
     href: "/universities",
     label: "Universitetlar",
     icon: <Icon d="M3 21h18M9 21V7l4-4 4 4v14M9 12h6" />,

@@ -8,11 +8,17 @@ import type { Submission, Faculty, Department, Quarter, SubmissionStatus } from 
 import { STATUS_LABEL, SELECTABLE_STATUSES } from "@/lib/workflow";
 
 const QUARTERS: Quarter[] = ["Q1", "Q2", "Q3", "Q4"];
-const STATUSES: SubmissionStatus[] = SELECTABLE_STATUSES;
 
 export default function SubmissionsListPage() {
   const supabase = createClient();
   const { user } = useSupabaseAuth();
+  const availableStatuses = useMemo(
+    () =>
+      user?.role === "dean"
+        ? SELECTABLE_STATUSES.filter((status) => status !== "draft")
+        : SELECTABLE_STATUSES,
+    [user?.role]
+  );
 
   const [rows, setRows] = useState<Submission[]>([]);
   const [targets, setTargets] = useState<import("@/types/db").Target[]>([]);
@@ -60,6 +66,7 @@ export default function SubmissionsListPage() {
       .select("*")
       .eq("university_id", user.university_id)
       .order("updated_at", { ascending: false });
+    if (user.role === "dean") q = q.neq("status", "draft");
     if (filterStatus) q = q.eq("status", filterStatus);
     if (filterYear) q = q.eq("year", filterYear);
     if (filterQuarter) q = q.eq("quarter", filterQuarter);
@@ -85,7 +92,7 @@ export default function SubmissionsListPage() {
       }
     }
     setLoading(false);
-  }, [supabase, user?.university_id, filterStatus, filterYear, filterQuarter, filterFaculty]);
+  }, [supabase, user?.university_id, user?.role, filterStatus, filterYear, filterQuarter, filterFaculty]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -111,7 +118,7 @@ export default function SubmissionsListPage() {
               className="w-full rounded-md border border-surface-300 dark:border-surface-600 bg-white dark:bg-surface-800 px-3 py-2 text-sm"
             >
               <option value="">Barchasi</option>
-              {STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABEL[s].text}</option>)}
+              {availableStatuses.map((s) => <option key={s} value={s}>{STATUS_LABEL[s].text}</option>)}
             </select>
           </div>
           <div>
@@ -220,7 +227,6 @@ export default function SubmissionsListPage() {
     </div>
   );
 }
-
 
 
 
