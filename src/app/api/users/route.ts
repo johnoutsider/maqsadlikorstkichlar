@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { normalizePhone } from "@/lib/telegram";
 import type { RoleName } from "@/types/db";
 
 interface CreateUserBody {
@@ -8,6 +9,7 @@ interface CreateUserBody {
   password: string;
   display_name: string;
   role: RoleName;
+  phone?: string | null;
   university_id?: string | null;
   faculty_id?: string | null;
   department_id?: string | null;
@@ -19,6 +21,7 @@ interface UpdateUserBody {
   password?: string;
   display_name: string;
   role: RoleName;
+  phone?: string | null;
   faculty_id?: string | null;
   department_id?: string | null;
 }
@@ -176,6 +179,7 @@ export async function POST(req: Request) {
       email,
       display_name,
         role_id: roleRow.id,
+        phone: body.phone ? normalizePhone(body.phone) : null,
         university_id: body.university_id ?? null,
         faculty_id: body.faculty_id ?? null,
         department_id: body.department_id ?? null,
@@ -267,6 +271,7 @@ export async function PATCH(req: Request) {
       email,
       display_name,
       role_id: roleRow.id,
+      phone: body.phone ? normalizePhone(body.phone) : null,
       faculty_id,
       department_id,
     })

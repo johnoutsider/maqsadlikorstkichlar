@@ -13,6 +13,7 @@ interface Row {
   id: string;
   display_name: string;
   email: string;
+  phone: string | null;
   role_id: string;
   faculty_id: string | null;
   department_id: string | null;
@@ -52,6 +53,7 @@ export default function UsersPage() {
   const [editingUser, setEditingUser] = useState<Row | null>(null);
   const [displayName, setDisplayName] = useState("");
   const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [role, setRole] = useState<RoleName>("staff_manager");
   const [facultyId, setFacultyId] = useState("");
@@ -75,7 +77,7 @@ export default function UsersPage() {
     const [u, f, d] = await Promise.all([
       supabase
         .from("users")
-        .select("id, display_name, email, role_id, faculty_id, department_id, roles!inner(name)")
+        .select("id, display_name, email, phone, role_id, faculty_id, department_id, roles!inner(name)")
         .eq("university_id", user.university_id),
       supabase.from("faculties").select("*").eq("university_id", user.university_id).order("short_code"),
       supabase.from("departments").select("*").eq("university_id", user.university_id).order("short_code"),
@@ -89,6 +91,7 @@ export default function UsersPage() {
           id: r.id,
           display_name: r.display_name,
           email: r.email,
+          phone: r.phone,
           role_id: r.role_id,
           faculty_id: r.faculty_id,
           department_id: r.department_id,
@@ -133,6 +136,7 @@ export default function UsersPage() {
     setEditingUser(null);
     setDisplayName("");
     setEmail("");
+    setPhone("");
     setPassword("");
     setRole("staff_manager");
     setFacultyId("");
@@ -145,6 +149,7 @@ export default function UsersPage() {
     setEditingUser(r);
     setDisplayName(r.display_name);
     setEmail(r.email);
+    setPhone(r.phone ?? "");
     setPassword("");
     setRole(r.role_name);
     setFacultyId(r.faculty_id ?? "");
@@ -182,6 +187,7 @@ export default function UsersPage() {
       email: email.trim(),
       password: password || undefined,
       display_name: displayName.trim(),
+      phone: phone.trim() || null,
       role,
       faculty_id: facultyId || null,
       department_id: departmentId || null,
@@ -403,6 +409,7 @@ export default function UsersPage() {
           )}
           <Input label="To'liq ism" value={displayName} onChange={(e) => setDisplayName(e.target.value)} required />
           <Input label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="off" />
+          <Input label="Telefon raqami" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+998 90 123 45 67" autoComplete="off" />
           <Input
             label={editingUser ? "Yangi parol (ixtiyoriy)" : "Vaqtinchalik parol (kamida 8 ta belgi)"}
             type="text"

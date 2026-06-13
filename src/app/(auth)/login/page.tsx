@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -180,6 +181,16 @@ export default function LoginPage() {
         <p className="text-center mt-5 text-xs" style={{ color: "var(--on-surface-variant)", opacity: 0.55 }}>
           Kirish muammolari bo&apos;lsa, administratoriga murojaat qiling.
         </p>
+
+        <div className="mt-4 text-center">
+          <Link
+            href="/himoya-arizasi"
+            className="text-sm font-medium"
+            style={{ color: "var(--primary)" }}
+          >
+            Himoya uchun ariza topshirish
+          </Link>
+        </div>
       </div>
     </div>
   );

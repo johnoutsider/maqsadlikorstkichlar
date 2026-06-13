@@ -77,6 +77,7 @@ export interface AppUser {
   department_id: string | null;
   display_name: string;
   email: string;
+  phone: string | null;
   must_change_password: boolean;
   created_by: string | null;
   created_at: string;
@@ -422,3 +423,54 @@ export const WORK_TYPE_GROUP_MAP: Partial<Record<WorkType, GroupType>> = {
   seminar: 'seminar',
   amaliy:  'amaliy',
 };
+
+// ============================================================================
+// Himoya arizasi (public dissertation-defense application portal)
+// ============================================================================
+
+export type DefenseStatus =
+  | "draft"
+  | "pending_science"
+  | "pending_vice_rector"
+  | "needs_revision"
+  | "approved"
+  | "rejected";
+
+export interface DefenseReviewHistoryEntry {
+  stage: "science" | "vice_rector";
+  reviewer_id: string;
+  at: string;
+  outcome: "advanced" | "needs_revision" | "approved" | "rejected";
+  comment?: string | null;
+}
+
+export interface DefenseApplication {
+  id: string;
+  university_id: string;
+  reference_code: string;
+  applicant_full_name: string | null;
+  applicant_phone: string | null;
+  phone_verified: boolean;
+  applicant_chat_id: number | null;
+  dissertation_info: Record<string, string>;
+  avtoreferat_info: Record<string, string>;
+  documents: Record<string, string[]>;
+  department_id: string | null;
+  status: DefenseStatus;
+  science_reviewed_by: string | null;
+  science_reviewed_at: string | null;
+  science_comment: string | null;
+  vice_rector_reviewed_by: string | null;
+  vice_rector_reviewed_at: string | null;
+  vice_rector_comment: string | null;
+  review_history: DefenseReviewHistoryEntry[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TelegramContact {
+  phone: string;
+  chat_id: number;
+  linked_user_id: string | null;
+  created_at: string;
+}
