@@ -51,13 +51,11 @@ export default function HimoyaArizasiDetailPage() {
   const supabase = createClient();
   const { user } = useSupabaseAuth();
 
-  const [application, setApplication] = useState<DefenseApplication | null>(null);
-  const [departments, setDepartments] = useState<Array<{ id: string; name: string }>>([]);
+  const [application, setApplication] = useState<(DefenseApplication & { departments: { name: string } | null }) | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  const [departmentId, setDepartmentId] = useState("");
   const [comment, setComment] = useState("");
 
   useEffect(() => {
@@ -65,45 +63,32 @@ export default function HimoyaArizasiDetailPage() {
       setLoading(true);
       const { data } = await supabase
         .from("defense_applications")
-        .select("*")
+        .select("*, departments(name)")
         .eq("id", params.id)
         .maybeSingle();
-      if (data) setApplication(data as DefenseApplication);
-
-      if (user?.university_id) {
-        const { data: depts } = await supabase
-          .from("departments")
-          .select("id, name")
-          .eq("university_id", user.university_id)
-          .order("name");
-        if (depts) setDepartments(depts as Array<{ id: string; name: string }>);
-      }
+      if (data) setApplication(data as DefenseApplication & { departments: { name: string } | null });
       setLoading(false);
     }
     fetchData();
-  }, [supabase, params.id, user?.university_id]);
+  }, [supabase, params.id]);
 
   async function refresh() {
     const { data } = await supabase
       .from("defense_applications")
-      .select("*")
+      .select("*, departments(name)")
       .eq("id", params.id)
       .maybeSingle();
-    if (data) setApplication(data as DefenseApplication);
+    if (data) setApplication(data as DefenseApplication & { departments: { name: string } | null });
   }
 
   async function handleScienceAction(action: "advance" | "needs_revision") {
     setError("");
-    if (action === "advance" && !departmentId) {
-      setError("Kafedra/bo'lim tanlanishi shart.");
-      return;
-    }
     setSubmitting(true);
     try {
       const res = await fetch(`/api/defense-applications/${params.id}/review`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action, department_id: departmentId || undefined, comment: comment || undefined }),
+        body: JSON.stringify({ action, comment: comment || undefined }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -173,6 +158,7 @@ export default function HimoyaArizasiDetailPage() {
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="F.I.Sh." value={application.applicant_full_name ?? ""} />
           <Field label="Telefon raqami" value={application.applicant_phone ?? ""} />
+          <Field label="Kafedra / bo'lim" value={application.departments?.name ?? ""} />
         </div>
       </div>
 
@@ -241,23 +227,6 @@ export default function HimoyaArizasiDetailPage() {
         <div className="rounded-3xl bg-[var(--surface-container-lowest)] p-6 shadow-[0_24px_60px_rgba(42,52,57,0.06)] sm:p-8">
           <SectionTitle>Ko&apos;rib chiqish</SectionTitle>
           <div className="space-y-4">
-            <div className="space-y-1">
-              <label className="px-1 text-[10px] font-bold uppercase tracking-[0.05em] text-[var(--on-surface-variant)]">
-                Yo&apos;naltiriladigan kafedra/bo&apos;lim
-              </label>
-              <select
-                value={departmentId}
-                onChange={(e) => setDepartmentId(e.target.value)}
-                className={fieldClassName()}
-              >
-                <option value="">Tanlang...</option>
-                {departments.map((dept) => (
-                  <option key={dept.id} value={dept.id}>
-                    {dept.name}
-                  </option>
-                ))}
-              </select>
-            </div>
             <div className="space-y-1">
               <label className="px-1 text-[10px] font-bold uppercase tracking-[0.05em] text-[var(--on-surface-variant)]">
                 Izoh

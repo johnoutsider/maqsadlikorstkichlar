@@ -36,19 +36,15 @@ export async function POST(req: Request, context: RouteContext) {
   const body = await req.json().catch(() => null);
   const action = body?.action;
   const comment = typeof body?.comment === "string" ? body.comment.trim() : null;
-  const departmentId = typeof body?.department_id === "string" ? body.department_id : null;
 
   if (action !== "advance" && action !== "needs_revision") {
     return bad("Noto'g'ri amal.", 422);
-  }
-  if (action === "advance" && !departmentId) {
-    return bad("Kafedra/bo'lim tanlanishi shart.", 422);
   }
 
   const admin = createAdminClient();
   const { data: application, error: fetchError } = await admin
     .from("defense_applications")
-    .select("id, university_id, reference_code, status, applicant_chat_id, applicant_full_name, review_history")
+    .select("id, university_id, reference_code, status, applicant_chat_id, applicant_full_name, department_id, review_history")
     .eq("id", id)
     .maybeSingle();
 
@@ -58,16 +54,8 @@ export async function POST(req: Request, context: RouteContext) {
   if (!canReviewDefenseApplication(role, application.status as DefenseApplication["status"])) {
     return bad("Ushbu ariza hozir ko'rib chiqish bosqichida emas.", 409);
   }
-
-  if (action === "advance") {
-    const { data: department } = await admin
-      .from("departments")
-      .select("id")
-      .eq("id", departmentId!)
-      .eq("university_id", application.university_id)
-      .maybeSingle();
-
-    if (!department) return bad("Tanlangan kafedra topilmadi.", 422);
+  if (action === "advance" && !application.department_id) {
+    return bad("Ariza uchun kafedra tanlanmagan.", 422);
   }
 
   const historyEntry: DefenseReviewHistoryEntry = {
@@ -86,7 +74,6 @@ export async function POST(req: Request, context: RouteContext) {
     review_history: reviewHistory,
     status: action === "advance" ? "pending_vice_rector" : "needs_revision",
   };
-  if (action === "advance") update.department_id = departmentId;
 
   const { error: updateError } = await admin.from("defense_applications").update(update).eq("id", id);
   if (updateError) return bad(updateError.message, 500);
