@@ -138,8 +138,13 @@ const NAV: NavItem[] = [
     roles: ["science_department", "supervisor", "doktorant"],
     children: [
       {
-        href: "/doktorantura",
-        label: "Doktorantlar",
+        href: "/izlanuvchilar/doktorant",
+        label: "Doktorant va stajor-tadqiqotchilar",
+        roles: ["science_department"],
+      },
+      {
+        href: "/izlanuvchilar/mustaqil",
+        label: "Mustaqil izlanuvchilar",
         roles: ["science_department"],
       },
       {
