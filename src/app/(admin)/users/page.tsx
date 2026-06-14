@@ -18,6 +18,8 @@ interface Row {
   faculty_id: string | null;
   department_id: string | null;
   role_name: RoleName;
+  roles: RoleName[];
+  primary_role: RoleName;
 }
 
 const ROLE_LABEL: Record<string, string> = {
@@ -27,6 +29,7 @@ const ROLE_LABEL: Record<string, string> = {
   dean: "Dekan",
   staff_manager: "Kafedra mudiri",
   oquv_bolimi: "O'quv bo'limi",
+  monitor: "Nazoratchi",
   supervisor: "Ilmiy rahbar",
   doktorant: "Doktorant",
 };
@@ -38,6 +41,7 @@ const ALL_ASSIGNABLE_ROLES: RoleName[] = [
   "dean",
   "staff_manager",
   "oquv_bolimi",
+  "monitor",
 ];
 
 export default function UsersPage() {
@@ -55,7 +59,8 @@ export default function UsersPage() {
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
-  const [role, setRole] = useState<RoleName>("staff_manager");
+  const [roles, setRoles] = useState<RoleName[]>(["staff_manager"]);
+  const [primaryRole, setPrimaryRole] = useState<RoleName | "">("staff_manager");
   const [facultyId, setFacultyId] = useState("");
   const [departmentId, setDepartmentId] = useState("");
   const [saving, setSaving] = useState(false);
@@ -77,7 +82,9 @@ export default function UsersPage() {
     const [u, f, d] = await Promise.all([
       supabase
         .from("users")
-        .select("id, display_name, email, phone, role_id, faculty_id, department_id, roles!inner(name)")
+        .select(
+          "id, display_name, email, phone, role_id, faculty_id, department_id, roles!users_role_id_fkey!inner(name), user_roles(is_primary, granted_role:roles(name))"
+        )
         .eq("university_id", user.university_id),
       supabase.from("faculties").select("*").eq("university_id", user.university_id).order("short_code"),
       supabase.from("departments").select("*").eq("university_id", user.university_id).order("short_code"),
@@ -87,16 +94,23 @@ export default function UsersPage() {
       setError(u.error.message);
     } else {
       setRows(
-        ((u.data as any[]) ?? []).map((r) => ({
-          id: r.id,
-          display_name: r.display_name,
-          email: r.email,
-          phone: r.phone,
-          role_id: r.role_id,
-          faculty_id: r.faculty_id,
-          department_id: r.department_id,
-          role_name: r.roles.name,
-        }))
+        ((u.data as any[]) ?? []).map((r) => {
+          const grants = (r.user_roles as any[]) ?? [];
+          const grantedRoles: RoleName[] = grants.map((g) => g.granted_role.name);
+          const primary = grants.find((g) => g.is_primary)?.granted_role.name ?? r.roles.name;
+          return {
+            id: r.id,
+            display_name: r.display_name,
+            email: r.email,
+            phone: r.phone,
+            role_id: r.role_id,
+            faculty_id: r.faculty_id,
+            department_id: r.department_id,
+            role_name: r.roles.name,
+            roles: grantedRoles.length > 0 ? grantedRoles : [r.roles.name],
+            primary_role: primary,
+          };
+        })
       );
     }
 
@@ -138,7 +152,8 @@ export default function UsersPage() {
     setEmail("");
     setPhone("");
     setPassword("");
-    setRole("staff_manager");
+    setRoles(["staff_manager"]);
+    setPrimaryRole("staff_manager");
     setFacultyId("");
     setDepartmentId("");
     setFormError("");
@@ -151,11 +166,26 @@ export default function UsersPage() {
     setEmail(r.email);
     setPhone(r.phone ?? "");
     setPassword("");
-    setRole(r.role_name);
+    setRoles(r.roles);
+    setPrimaryRole(r.primary_role);
     setFacultyId(r.faculty_id ?? "");
     setDepartmentId(r.department_id ?? "");
     setFormError("");
     setModalOpen(true);
+  };
+
+  const toggleRole = (roleName: RoleName) => {
+    setRoles((prev) => {
+      const next = prev.includes(roleName)
+        ? prev.filter((r) => r !== roleName)
+        : [...prev, roleName];
+      setPrimaryRole((prevPrimary) =>
+        next.includes(prevPrimary as RoleName) ? prevPrimary : next[0] ?? ""
+      );
+      if (!next.includes("dean") && !next.includes("staff_manager")) setFacultyId("");
+      if (!next.includes("staff_manager")) setDepartmentId("");
+      return next;
+    });
   };
 
   const save = async (e: React.FormEvent) => {
@@ -172,12 +202,22 @@ export default function UsersPage() {
       return;
     }
 
-    if (role === "dean" && !facultyId) {
-      setFormError("Dekan uchun fakultet tanlang.");
+    if (roles.length === 0) {
+      setFormError("Kamida bir rol tanlang.");
       return;
     }
 
-    if (role === "staff_manager" && !departmentId) {
+    if (!primaryRole) {
+      setFormError("Asosiy rolni tanlang.");
+      return;
+    }
+
+    if ((roles.includes("dean") || roles.includes("staff_manager")) && !facultyId) {
+      setFormError("Dekan/kafedra mas'uli uchun fakultet tanlang.");
+      return;
+    }
+
+    if (roles.includes("staff_manager") && !departmentId) {
       setFormError("Kafedrani tanlash majburiy.");
       return;
     }
@@ -188,7 +228,8 @@ export default function UsersPage() {
       password: password || undefined,
       display_name: displayName.trim(),
       phone: phone.trim() || null,
-      role,
+      roles,
+      primary_role: primaryRole,
       faculty_id: facultyId || null,
       department_id: departmentId || null,
     };
@@ -331,7 +372,17 @@ export default function UsersPage() {
                 <tr key={r.id} className="hover:bg-surface-50 dark:hover:bg-surface-900/30">
                   <td className="px-4 py-3 text-sm">{r.display_name}</td>
                   <td className="px-4 py-3 font-mono text-sm text-surface-700 dark:text-surface-300">{r.email}</td>
-                  <td className="px-4 py-3 text-sm">{ROLE_LABEL[r.role_name] ?? r.role_name}</td>
+                  <td className="px-4 py-3 text-sm">
+                    {r.roles.map((roleName) => (
+                      <span key={roleName} className="mr-1 inline-block">
+                        {ROLE_LABEL[roleName] ?? roleName}
+                        {roleName === r.primary_role && r.roles.length > 1 && (
+                          <span className="text-xs text-surface-400"> (asosiy)</span>
+                        )}
+                        {r.roles[r.roles.length - 1] !== roleName && ","}
+                      </span>
+                    ))}
+                  </td>
                   <td className="px-4 py-3 text-sm text-surface-500">
                     {assignedName(r)}
                   </td>
@@ -421,25 +472,35 @@ export default function UsersPage() {
           />
 
           <div>
-            <label className="mb-1 block text-sm font-medium text-surface-700 dark:text-surface-300">Rol</label>
-            <select
-              value={role}
-              onChange={(e) => {
-                setRole(e.target.value as RoleName);
-                setFacultyId("");
-                setDepartmentId("");
-              }}
-              className="w-full rounded-md border border-surface-300 bg-white px-3 py-2 text-sm dark:border-surface-600 dark:bg-surface-800"
-            >
+            <label className="mb-1 block text-sm font-medium text-surface-700 dark:text-surface-300">Rollar</label>
+            <div className="space-y-1.5 rounded-md border border-surface-300 p-3 dark:border-surface-600">
               {ALL_ASSIGNABLE_ROLES.map((r) => (
-                <option key={r} value={r}>
-                  {ROLE_LABEL[r] ?? r}
-                </option>
+                <div key={r} className="flex items-center justify-between gap-2">
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={roles.includes(r)}
+                      onChange={() => toggleRole(r)}
+                    />
+                    {ROLE_LABEL[r] ?? r}
+                  </label>
+                  {roles.includes(r) && (
+                    <label className="flex items-center gap-1 text-xs text-surface-500">
+                      <input
+                        type="radio"
+                        name="primary_role"
+                        checked={primaryRole === r}
+                        onChange={() => setPrimaryRole(r)}
+                      />
+                      Asosiy
+                    </label>
+                  )}
+                </div>
               ))}
-            </select>
+            </div>
           </div>
 
-          {["dean", "staff_manager"].includes(role) && (
+          {(roles.includes("dean") || roles.includes("staff_manager")) && (
             <div>
               <label className="mb-1 block text-sm font-medium text-surface-700 dark:text-surface-300">Fakultet</label>
               <select
@@ -461,7 +522,7 @@ export default function UsersPage() {
             </div>
           )}
 
-          {role === "staff_manager" && facultyId && (
+          {roles.includes("staff_manager") && facultyId && (
             <div>
               <label className="mb-1 block text-sm font-medium text-surface-700 dark:text-surface-300">Kafedra</label>
               <select

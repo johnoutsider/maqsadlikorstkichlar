@@ -347,7 +347,7 @@ export async function POST(request: Request) {
 
   const { data: caller } = await supabase
     .from("users")
-    .select("university_id, roles!inner(name)")
+    .select("university_id, roles!users_role_id_fkey!inner(name)")
     .eq("id", authUser.id)
     .maybeSingle();
   if (!caller) return bad("Foydalanuvchi profili topilmadi.", 403);

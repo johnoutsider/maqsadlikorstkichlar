@@ -1,42 +1,44 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useSupabaseAuth } from "@/contexts/SupabaseAuthContext";
+import { createClient } from "@/lib/supabase/client";
+import { roleHome } from "@/lib/role-home";
 
 export default function LoginPage() {
   const router = useRouter();
-  const { signIn, signOut, authUser, user, loading, profileLoading } = useSupabaseAuth();
-
-  const destinationFor = (role?: string) => {
-    if (role === "super_admin") return "/universities";
-    if (role === "staff_manager") return "/form";
-    if (role === "university_admin") return "/users";
-    if (role === "science_department") return "/targets";
-    if (role === "vice_rector" || role === "dean") return "/targets";
-    if (role === "supervisor") return "/doktorantura/mening-talabalarim";
-    if (role === "doktorant") return "/doktorantura/mening-profilim";
-    return "/overview";
-  };
+  const { signIn, signOut, authUser, user, loading, profileLoading, refresh } = useSupabaseAuth();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const justSignedIn = useRef(false);
 
   useEffect(() => {
     if (loading || profileLoading) return;
     if (authUser && user) {
-      router.push(destinationFor(user.role));
+      if (justSignedIn.current) {
+        justSignedIn.current = false;
+        const supabase = createClient();
+        (async () => {
+          await supabase.rpc("reset_to_primary_role");
+          await refresh();
+          router.push(roleHome(user.role));
+        })();
+        return;
+      }
+      router.push(roleHome(user.role));
     } else if (authUser && !user) {
       signOut();
       setError("Profilingiz topilmadi. Qaytadan kiring.");
     }
-  }, [authUser, user, loading, profileLoading, router, signOut]);
+  }, [authUser, user, loading, profileLoading, router, signOut, refresh]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -52,6 +54,7 @@ export default function LoginPage() {
       );
       return;
     }
+    justSignedIn.current = true;
   };
 
   if (loading || profileLoading || (authUser && user)) {

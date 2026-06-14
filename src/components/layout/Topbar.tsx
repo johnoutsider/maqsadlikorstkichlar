@@ -4,6 +4,7 @@ import React, { useState, useRef, useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { useSupabaseAuth } from "@/contexts/SupabaseAuthContext";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
+import { roleHome } from "@/lib/role-home";
 import type { UniversityBrand } from "./AppShell";
 
 const ROLE_LABEL: Record<string, string> = {
@@ -13,6 +14,10 @@ const ROLE_LABEL: Record<string, string> = {
   science_department: "Ilmiy Bo'lim",
   dean: "Dekan",
   staff_manager: "Kafedra Mas'uli",
+  oquv_bolimi: "O'quv Bo'lim",
+  monitor: "Nazoratchi",
+  supervisor: "Ilmiy rahbar",
+  doktorant: "Doktorant",
 };
 
 const BREADCRUMB_LABELS: Record<string, string> = {
@@ -28,13 +33,23 @@ const BREADCRUMB_LABELS: Record<string, string> = {
   form: "Hisobot Formasi",
   "my-submissions": "Mening Hisobotlarim",
   notifications: "Bildirishnomalar",
+  nazoratchi: "Nazoratchi",
+  izlanuvchilar: "Izlanuvchilar",
+  doktorant: "Doktorantlar",
+  mustaqil: "Mustaqil izlanuvchilar",
+  baholash: "Baholash",
+  natijalar: "Natijalar",
+  "monitoring-natijalari": "Monitoring natijalari",
+  create: "Yangi izlanuvchi",
+  edit: "Tahrirlash",
 };
 
 export function Topbar({ brand }: { brand: UniversityBrand }) {
-  const { user, signOut } = useSupabaseAuth();
+  const { user, signOut, switchRole } = useSupabaseAuth();
   const router = useRouter();
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const [switching, setSwitching] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -198,6 +213,66 @@ export function Topbar({ brand }: { brand: UniversityBrand }) {
                   </span>
                 </div>
               </div>
+
+              {/* Role switcher */}
+              {user.roles_granted.length > 1 && (
+                <div
+                  className="px-4 py-3"
+                  style={{ borderBottom: "1px solid var(--outline-variant)" }}
+                >
+                  <p
+                    className="mb-2 font-medium uppercase"
+                    style={{ fontSize: "0.625rem", letterSpacing: "0.08em", color: "var(--on-surface-variant)" }}
+                  >
+                    Rol
+                  </p>
+                  <div className="space-y-1">
+                    {user.roles_granted.map((grant) => {
+                      const active = grant.name === user.role;
+                      return (
+                        <button
+                          key={grant.role_id}
+                          disabled={active || switching}
+                          onClick={async () => {
+                            setSwitching(true);
+                            const { error } = await switchRole(grant.name);
+                            setSwitching(false);
+                            if (error) return;
+                            setOpen(false);
+                            router.push(roleHome(grant.name));
+                          }}
+                          className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-sm transition-colors text-left disabled:cursor-default"
+                          style={{
+                            background: active ? "var(--surface-container-high)" : "transparent",
+                            color: "var(--on-surface)",
+                            fontWeight: active ? 600 : 400,
+                          }}
+                          onMouseEnter={(e) => {
+                            if (!active) (e.currentTarget as HTMLElement).style.background = "var(--surface-container-low)";
+                          }}
+                          onMouseLeave={(e) => {
+                            if (!active) (e.currentTarget as HTMLElement).style.background = "transparent";
+                          }}
+                        >
+                          <span>{ROLE_LABEL[grant.name] ?? grant.name}</span>
+                          {grant.is_primary && (
+                            <span
+                              className="rounded-full px-2 py-0.5 font-medium"
+                              style={{
+                                fontSize: "0.625rem",
+                                background: "var(--surface-container-high)",
+                                color: "var(--on-surface-variant)",
+                              }}
+                            >
+                              Asosiy
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               {/* Theme toggle */}
               <div

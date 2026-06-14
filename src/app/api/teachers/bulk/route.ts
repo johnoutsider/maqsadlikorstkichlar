@@ -161,7 +161,7 @@ export async function POST(req: Request) {
 
   const { data: caller } = await supabase
     .from("users")
-    .select("university_id, roles!inner(name)")
+    .select("university_id, roles!users_role_id_fkey!inner(name)")
     .eq("id", authUser.id)
     .maybeSingle();
   if (!caller) return bad("Caller profile missing", 403);

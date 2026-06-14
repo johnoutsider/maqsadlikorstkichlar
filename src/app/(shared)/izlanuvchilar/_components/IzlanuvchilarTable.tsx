@@ -103,12 +103,21 @@ function importedSourceNo(row: Izlanuvchi) {
   return typeof value === "string" && value ? value : null;
 }
 
+function departmentName(row: Izlanuvchi) {
+  const department = (row as Izlanuvchi & {
+    departments?: { name?: string | null } | null;
+  }).departments;
+  return department?.name ?? null;
+}
+
 export function IzlanuvchilarTable({
   turi,
   title,
+  basePath = "/izlanuvchilar",
 }: {
   turi: IzlanuvchiTuri;
   title: string;
+  basePath?: string;
 }) {
   const supabaseRef = useRef(createClient());
   const supabase = supabaseRef.current;
@@ -136,9 +145,13 @@ export function IzlanuvchilarTable({
     failed: 0,
   });
 
-  const canWrite = ["science_department", "university_admin", "super_admin"].includes(
+  const canAddEdit = ["science_department", "university_admin", "super_admin", "monitor"].includes(
     user?.role ?? ""
   );
+  const canImport = ["science_department", "university_admin", "super_admin"].includes(
+    user?.role ?? ""
+  );
+  const canDelete = canImport;
 
   const load = useCallback(
     async (force = false) => {
@@ -154,7 +167,7 @@ export function IzlanuvchilarTable({
       setError("");
       const { data, error: databaseError } = await supabase
         .from("izlanuvchilar")
-        .select("*")
+        .select("*, departments(name)")
         .eq("turi", turi)
         .order("full_name");
 
@@ -318,6 +331,7 @@ export function IzlanuvchilarTable({
         "DOKTORANT",
         "TA'LIM SHAKLI",
         "IXTISOSLIK",
+        "KAFEDRA",
         "TA'LIM TILI",
         "CHORAK",
         "ILMIY RAHBAR",
@@ -333,6 +347,7 @@ export function IzlanuvchilarTable({
           row.full_name,
           row.education_stage ?? "",
           row.specialty_code ?? "",
+          departmentName(row) ?? "",
           row.talim_tili ?? "",
           row.chorak ?? "",
           row.supervisor_name ?? "",
@@ -352,9 +367,9 @@ export function IzlanuvchilarTable({
       };
       header.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
       worksheet.views = [{ state: "frozen", ySplit: 1 }];
-      worksheet.autoFilter = { from: "A1", to: "K1" };
+      worksheet.autoFilter = { from: "A1", to: "L1" };
       worksheet.columns.forEach((column, index) => {
-        column.width = [7, 34, 28, 18, 18, 14, 30, 20, 18, 34, 22][index];
+        column.width = [7, 34, 28, 18, 30, 18, 14, 30, 20, 18, 34, 22][index];
       });
 
       const buffer = await workbook.xlsx.writeBuffer();
@@ -403,31 +418,35 @@ export function IzlanuvchilarTable({
           </p>
         </div>
 
-        {canWrite && (
+        {canAddEdit && (
           <div className="flex flex-wrap items-center gap-2">
-            <a href="/api/izlanuvchilar/bulk" download>
-              <Button variant="outline" size="md">
-                Shablon
-              </Button>
-            </a>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".xlsx"
-              className="hidden"
-              onChange={handleBulkUpload}
-            />
+            {canImport && (
+              <>
+                <a href="/api/izlanuvchilar/bulk" download>
+                  <Button variant="outline" size="md">
+                    Shablon
+                  </Button>
+                </a>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".xlsx"
+                  className="hidden"
+                  onChange={handleBulkUpload}
+                />
+                <Button
+                  variant="outline"
+                  size="md"
+                  isLoading={bulkUploading}
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  Excel import
+                </Button>
+              </>
+            )}
             <Button
-              variant="outline"
               size="md"
-              isLoading={bulkUploading}
-              onClick={() => fileInputRef.current?.click()}
-            >
-              Excel import
-            </Button>
-            <Button
-              size="md"
-              onClick={() => router.push(`/izlanuvchilar/create?turi=${turi}`)}
+              onClick={() => router.push(`${basePath}/create?turi=${turi}`)}
             >
               + Qo&apos;shish
             </Button>
@@ -653,6 +672,7 @@ export function IzlanuvchilarTable({
                     "DOKTORANT",
                     "TA'LIM SHAKLI",
                     "IXTISOSLIK",
+                    "KAFEDRA",
                     "ILMIY RAHBAR",
                     "PINFL",
                     "HOLAT",
@@ -693,6 +713,9 @@ export function IzlanuvchilarTable({
                       {row.specialty_code ?? "—"}
                     </td>
                     <td className="max-w-[14rem] px-3 py-3 text-sm text-surface-600 dark:text-surface-300">
+                      {departmentName(row) ?? "—"}
+                    </td>
+                    <td className="max-w-[14rem] px-3 py-3 text-sm text-surface-600 dark:text-surface-300">
                       {row.supervisor_name ?? "—"}
                     </td>
                     <td className="whitespace-nowrap px-3 py-3 font-mono text-xs text-surface-600 dark:text-surface-300">
@@ -717,27 +740,29 @@ export function IzlanuvchilarTable({
                             <circle cx="12" cy="12" r="2.5" />
                           </svg>
                         </Icon>
-                        {canWrite && (
+                        {canAddEdit && (
                           <>
                             <Icon
                               label="Tahrirlash"
                               onClick={() =>
-                                router.push(`/izlanuvchilar/${row.id}/edit`)
+                                router.push(`${basePath}/${row.id}/edit`)
                               }
                             >
                               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                 <path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4L16.5 3.5z" strokeLinecap="round" strokeLinejoin="round" />
                               </svg>
                             </Icon>
-                            <Icon
-                              label="O'chirish"
-                              tone="danger"
-                              onClick={() => remove(row)}
-                            >
-                              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                <path d="M3 6h18M8 6V4h8v2m-9 0 1 15h8l1-15M10 10v7m4-7v7" strokeLinecap="round" strokeLinejoin="round" />
-                              </svg>
-                            </Icon>
+                            {canDelete && (
+                              <Icon
+                                label="O'chirish"
+                                tone="danger"
+                                onClick={() => remove(row)}
+                              >
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                  <path d="M3 6h18M8 6V4h8v2m-9 0 1 15h8l1-15M10 10v7m4-7v7" strokeLinecap="round" strokeLinejoin="round" />
+                                </svg>
+                              </Icon>
+                            )}
                           </>
                         )}
                       </div>
@@ -810,6 +835,7 @@ export function IzlanuvchilarTable({
             <Detail label="Ro'yxat raqami" value={importedSourceNo(viewing)} />
             <Detail label="Ta'lim shakli" value={viewing.education_stage} />
             <Detail label="Ixtisoslik" value={viewing.specialty_code} />
+            <Detail label="Kafedra" value={departmentName(viewing)} />
             <Detail label="Ixtisoslik nomi" value={viewing.specialty_name} wide />
             <Detail label="PINFL" value={viewing.pinfl} />
             <Detail label="Telefon" value={viewing.phone} />

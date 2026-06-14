@@ -8,7 +8,9 @@ interface CreateUserBody {
   email: string;
   password: string;
   display_name: string;
-  role: RoleName;
+  role?: RoleName;
+  roles?: RoleName[];
+  primary_role?: RoleName;
   phone?: string | null;
   university_id?: string | null;
   faculty_id?: string | null;
@@ -20,10 +22,20 @@ interface UpdateUserBody {
   email: string;
   password?: string;
   display_name: string;
-  role: RoleName;
+  role?: RoleName;
+  roles?: RoleName[];
+  primary_role?: RoleName;
   phone?: string | null;
   faculty_id?: string | null;
   department_id?: string | null;
+}
+
+// Normalize the legacy single-`role` shape (still used by bulk import) into
+// the multi-role `roles` + `primary_role` shape used by this API.
+function normalizeRoles(body: { role?: RoleName; roles?: RoleName[]; primary_role?: RoleName }) {
+  const roles = body.roles ?? (body.role ? [body.role] : []);
+  const primary_role = body.primary_role ?? body.role ?? roles[0];
+  return { roles, primary_role };
 }
 
 const ROLES_REQUIRING_UNIVERSITY: RoleName[] = [
@@ -31,7 +43,8 @@ const ROLES_REQUIRING_UNIVERSITY: RoleName[] = [
   "vice_rector",
   "science_department",
   "dean",
-  "staff_manager"
+  "staff_manager",
+  "monitor"
 ];
 
 const ROLES_REQUIRING_FACULTY: RoleName[] = ["dean"];
@@ -50,7 +63,7 @@ async function getCaller() {
 
   const { data: caller, error: callerErr } = await supabase
     .from("users")
-    .select("id, university_id, roles!inner(name)")
+    .select("id, university_id, roles!users_role_id_fkey!inner(name)")
     .eq("id", authUser.id)
     .maybeSingle();
 
@@ -99,10 +112,12 @@ export async function POST(req: Request) {
   const body = (await req.json().catch(() => null)) as CreateUserBody | null;
   if (!body) return bad("Invalid JSON body");
 
-  const { email, password, display_name, role } = body;
-  if (!email || !password || !display_name || !role) {
-    return bad("email, password, display_name, role are required");
+  const { email, password, display_name } = body;
+  const { roles, primary_role } = normalizeRoles(body);
+  if (!email || !password || !display_name || roles.length === 0 || !primary_role) {
+    return bad("email, password, display_name, roles are required");
   }
+  if (!roles.includes(primary_role)) return bad("primary_role must be one of roles");
   if (password.length < 8) return bad("Password must be at least 8 characters");
 
   // 1. Identify caller via session cookies
@@ -114,47 +129,50 @@ export async function POST(req: Request) {
   if (callerRole !== "super_admin" && callerRole !== "university_admin" && callerRole !== "science_department") {
     return bad("Forbidden: insufficient permissions to manage users", 403);
   }
-  
+
   if (callerRole === "science_department") {
     return bad("science_department foydalanuvchilari doktorant va supervisorlarni doktorantura moduli orqali yaratishi kerak.", 403);
   }
 
+  if (roles.some((r) => r === "supervisor" || r === "doktorant")) {
+    return bad("Supervisor va doktorant rollari maxsus doktorantura yaratish jarayoni orqali qo'shiladi.", 400);
+  }
+
   if (callerRole === "university_admin") {
-    if (role === "super_admin") return bad("Forbidden: cannot create super_admin", 403);
+    if (roles.includes("super_admin")) return bad("Forbidden: cannot create super_admin", 403);
     if (!callerUniversityId) return bad("Caller has no university assigned", 403);
     // Force scope to caller's university
     body.university_id = callerUniversityId;
   }
 
-  // 4. Validate scope fields against role
-  if (ROLES_REQUIRING_UNIVERSITY.includes(role) && !body.university_id) {
-    return bad(`Role "${role}" requires university_id`);
+  // 4. Validate scope fields against the chosen roles
+  if (roles.some((r) => ROLES_REQUIRING_UNIVERSITY.includes(r)) && !body.university_id) {
+    return bad(`roles require university_id`);
   }
-  if (ROLES_REQUIRING_FACULTY.includes(role) && !body.faculty_id) {
-    return bad(`Role "${role}" requires faculty_id`);
+  if (roles.some((r) => ROLES_REQUIRING_FACULTY.includes(r)) && !body.faculty_id) {
+    return bad(`roles require faculty_id`);
   }
-  if (ROLES_REQUIRING_DEPARTMENT.includes(role) && !body.department_id) {
-    return bad(`Role "${role}" requires department_id`);
+  if (roles.some((r) => ROLES_REQUIRING_DEPARTMENT.includes(r)) && !body.department_id) {
+    return bad(`roles require department_id`);
   }
-  if (role === "super_admin") {
+  if (roles.includes("super_admin")) {
     body.university_id = null;
     body.faculty_id = null;
     body.department_id = null;
   }
 
-  if (role === "supervisor" || role === "doktorant") {
-    return bad("Supervisor va doktorant rollari maxsus doktorantura yaratish jarayoni orqali qo'shiladi.", 400);
-  }
-
   // 5. Service-role client for the privileged ops
   const admin = createAdminClient();
 
-  const { data: roleRow, error: roleErr } = await admin
+  const { data: roleRows, error: roleErr } = await admin
     .from("roles")
-    .select("id")
-    .eq("name", role)
-    .maybeSingle();
-  if (roleErr || !roleRow) return bad(`Unknown role "${role}"`, 400);
+    .select("id, name")
+    .in("name", roles);
+  if (roleErr || !roleRows || roleRows.length !== roles.length) {
+    return bad("Unknown role in roles", 400);
+  }
+  const roleIdByName = new Map(roleRows.map((r) => [r.name as RoleName, r.id as string]));
+  const primaryRoleId = roleIdByName.get(primary_role)!;
 
   // Cross-check that faculty/department actually belong to the target university
   const scopeError = await validateUserScope(admin, body);
@@ -178,7 +196,7 @@ export async function POST(req: Request) {
       id: created.user.id,
       email,
       display_name,
-        role_id: roleRow.id,
+        role_id: primaryRoleId,
         phone: body.phone ? normalizePhone(body.phone) : null,
         university_id: body.university_id ?? null,
         faculty_id: body.faculty_id ?? null,
@@ -195,6 +213,19 @@ export async function POST(req: Request) {
     return bad(insertErr.message, 400);
   }
 
+  // 8. Grant the chosen roles
+  const { error: grantErr } = await admin.from("user_roles").insert(
+    roles.map((r) => ({
+      user_id: created.user.id,
+      role_id: roleIdByName.get(r)!,
+      is_primary: r === primary_role,
+    }))
+  );
+  if (grantErr) {
+    await admin.auth.admin.deleteUser(created.user.id);
+    return bad(grantErr.message, 400);
+  }
+
   return NextResponse.json({ user: profile }, { status: 201 });
 }
 
@@ -202,12 +233,14 @@ export async function PATCH(req: Request) {
   const body = (await req.json().catch(() => null)) as UpdateUserBody | null;
   if (!body) return bad("Invalid JSON body");
 
-  const { id, email, password, display_name, role } = body;
-  if (!id || !email || !display_name || !role) {
-    return bad("id, email, display_name, role are required");
+  const { id, email, password, display_name } = body;
+  const { roles, primary_role } = normalizeRoles(body);
+  if (!id || !email || !display_name || roles.length === 0 || !primary_role) {
+    return bad("id, email, display_name, roles are required");
   }
+  if (!roles.includes(primary_role)) return bad("primary_role must be one of roles");
   if (password && password.length < 8) return bad("Password must be at least 8 characters");
-  if (role === "supervisor" || role === "doktorant") {
+  if (roles.some((r) => r === "supervisor" || r === "doktorant")) {
     return bad("Supervisor va doktorant rollari maxsus doktorantura jarayoni orqali tahrirlanadi.", 400);
   }
 
@@ -219,7 +252,7 @@ export async function PATCH(req: Request) {
     return bad("Forbidden: insufficient permissions to manage users", 403);
   }
   if (callerRole === "university_admin") {
-    if (role === "super_admin") return bad("Forbidden: cannot assign super_admin", 403);
+    if (roles.includes("super_admin")) return bad("Forbidden: cannot assign super_admin", 403);
     if (!callerUniversityId) return bad("Caller has no university assigned", 403);
   }
 
@@ -236,22 +269,25 @@ export async function PATCH(req: Request) {
   }
 
   const university_id = callerRole === "university_admin" ? callerUniversityId : target.university_id;
-  const faculty_id = role === "dean" || role === "staff_manager" ? body.faculty_id ?? null : null;
-  const department_id = role === "staff_manager" ? body.department_id ?? null : null;
+  const faculty_id = roles.includes("dean") || roles.includes("staff_manager") ? body.faculty_id ?? null : null;
+  const department_id = roles.includes("staff_manager") ? body.department_id ?? null : null;
 
-  if (ROLES_REQUIRING_FACULTY.includes(role) && !faculty_id) {
-    return bad(`Role "${role}" requires faculty_id`);
+  if (roles.some((r) => ROLES_REQUIRING_FACULTY.includes(r)) && !faculty_id) {
+    return bad(`roles require faculty_id`);
   }
-  if (ROLES_REQUIRING_DEPARTMENT.includes(role) && !department_id) {
-    return bad(`Role "${role}" requires department_id`);
+  if (roles.some((r) => ROLES_REQUIRING_DEPARTMENT.includes(r)) && !department_id) {
+    return bad(`roles require department_id`);
   }
 
-  const { data: roleRow, error: roleErr } = await admin
+  const { data: roleRows, error: roleErr } = await admin
     .from("roles")
-    .select("id")
-    .eq("name", role)
-    .maybeSingle();
-  if (roleErr || !roleRow) return bad(`Unknown role "${role}"`, 400);
+    .select("id, name")
+    .in("name", roles);
+  if (roleErr || !roleRows || roleRows.length !== roles.length) {
+    return bad("Unknown role in roles", 400);
+  }
+  const roleIdByName = new Map(roleRows.map((r) => [r.name as RoleName, r.id as string]));
+  const primaryRoleId = roleIdByName.get(primary_role)!;
 
   const scopeError = await validateUserScope(admin, { university_id, faculty_id, department_id });
   if (scopeError) return bad(scopeError);
@@ -270,7 +306,7 @@ export async function PATCH(req: Request) {
     .update({
       email,
       display_name,
-      role_id: roleRow.id,
+      role_id: primaryRoleId,
       phone: body.phone ? normalizePhone(body.phone) : null,
       faculty_id,
       department_id,
@@ -280,6 +316,19 @@ export async function PATCH(req: Request) {
     .single();
 
   if (updateErr) return bad(updateErr.message, 400);
+
+  // Replace the user's role grants
+  const { error: deleteGrantsErr } = await admin.from("user_roles").delete().eq("user_id", id);
+  if (deleteGrantsErr) return bad(deleteGrantsErr.message, 400);
+
+  const { error: grantErr } = await admin.from("user_roles").insert(
+    roles.map((r) => ({
+      user_id: id,
+      role_id: roleIdByName.get(r)!,
+      is_primary: r === primary_role,
+    }))
+  );
+  if (grantErr) return bad(grantErr.message, 400);
 
   return NextResponse.json({ user: profile });
 }
@@ -297,7 +346,7 @@ export async function DELETE(req: Request) {
 
   const { data: caller } = await supabase
     .from("users")
-    .select("university_id, roles!inner(name)")
+    .select("university_id, roles!users_role_id_fkey!inner(name)")
     .eq("id", authUser.id)
     .maybeSingle();
   if (!caller) return bad("Caller profile missing", 403);
@@ -312,7 +361,7 @@ export async function DELETE(req: Request) {
   if (callerRole === "science_department") {
     const { data: target } = await supabase
       .from("users")
-      .select("university_id, roles!inner(name)")
+      .select("university_id, roles!users_role_id_fkey!inner(name)")
       .eq("id", targetId)
       .maybeSingle();
 

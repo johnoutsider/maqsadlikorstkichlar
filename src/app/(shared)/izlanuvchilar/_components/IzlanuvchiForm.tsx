@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { useSupabaseAuth } from "@/contexts/SupabaseAuthContext";
 import { createClient } from "@/lib/supabase/client";
-import type { Izlanuvchi, IzlanuvchiTuri } from "@/types/db";
+import type { Department, Izlanuvchi, IzlanuvchiTuri } from "@/types/db";
 import {
   STATUS_OPTIONS,
   TALIM_SHAKLI_OPTIONS,
@@ -137,9 +137,11 @@ function TextAreaField({
 export function IzlanuvchiForm({
   initialTuri,
   recordId,
+  basePath = "/izlanuvchilar",
 }: {
   initialTuri: IzlanuvchiTuri;
   recordId?: string;
+  basePath?: string;
 }) {
   const supabaseRef = useRef(createClient());
   const supabase = supabaseRef.current;
@@ -151,6 +153,25 @@ export function IzlanuvchiForm({
   const [loading, setLoading] = useState(Boolean(recordId));
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [departments, setDepartments] = useState<Department[]>([]);
+
+  useEffect(() => {
+    if (!user?.university_id) return;
+    let cancelled = false;
+
+    supabase
+      .from("departments")
+      .select("*")
+      .eq("university_id", user.university_id)
+      .order("name")
+      .then(({ data }) => {
+        if (!cancelled) setDepartments((data as Department[] | null) ?? []);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [supabase, user?.university_id]);
 
   useEffect(() => {
     if (!recordId) return;
@@ -180,10 +201,9 @@ export function IzlanuvchiForm({
     };
   }, [recordId, supabase]);
 
-  const listPath =
-    form.turi === "mustaqil"
-      ? "/izlanuvchilar/mustaqil"
-      : "/izlanuvchilar/doktorant";
+  const listPath = `${basePath}/${
+    form.turi === "mustaqil" ? "mustaqil" : "doktorant"
+  }`;
 
   const progressFields = useMemo(
     () => [
@@ -215,6 +235,10 @@ export function IzlanuvchiForm({
       setError("Familiya va ismni kiriting.");
       return;
     }
+    if (!payload.department_id) {
+      setError("Biriktirilgan kafedrani tanlang.");
+      return;
+    }
 
     setSubmitting(true);
     const query = recordId
@@ -237,9 +261,9 @@ export function IzlanuvchiForm({
 
     invalidateIzlanuvchilarCache();
     router.push(
-      payload.turi === "mustaqil"
-        ? "/izlanuvchilar/mustaqil"
-        : "/izlanuvchilar/doktorant"
+      `${basePath}/${
+        payload.turi === "mustaqil" ? "mustaqil" : "doktorant"
+      }`
     );
     router.refresh();
   }
@@ -382,6 +406,24 @@ export function IzlanuvchiForm({
                   onChange={(value) => update("course", value)}
                   placeholder="1-kurs"
                 />
+                <div className="space-y-1">
+                  <label className="px-1 text-[10px] font-bold uppercase tracking-[0.05em] text-[var(--on-surface-variant)]">
+                    Biriktirilgan kafedra
+                  </label>
+                  <select
+                    value={form.departmentId}
+                    required
+                    onChange={(event) => update("departmentId", event.target.value)}
+                    className={fieldClassName("cursor-pointer")}
+                  >
+                    <option value="">Kafedrani tanlang</option>
+                    {departments.map((department) => (
+                      <option key={department.id} value={department.id}>
+                        {department.short_code} - {department.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
                 <Field
                   label="Ta'lim tili"
                   value={form.talimTili}

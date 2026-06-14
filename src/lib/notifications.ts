@@ -40,7 +40,7 @@ export async function notifyDeans(
 ): Promise<void> {
   const { data: deans } = await supabase
     .from("users")
-    .select("id, roles!inner(name)")
+    .select("id, roles!users_role_id_fkey!inner(name)")
     .eq("university_id", args.universityId)
     .eq("faculty_id", args.facultyId)
     .eq("roles.name", "dean");
@@ -70,7 +70,7 @@ export async function notifyScienceDepartment(
 ): Promise<void> {
   const { data: reviewers } = await supabase
     .from("users")
-    .select("id, roles!inner(name)")
+    .select("id, roles!users_role_id_fkey!inner(name)")
     .eq("university_id", args.universityId)
     .in("roles.name", ["science_department"]);
   const list = (reviewers ?? []) as Array<{ id: string }>;

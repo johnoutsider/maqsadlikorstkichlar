@@ -61,7 +61,7 @@ export default async function TeacherPlanPage({
 
   const { data: profile } = await supabase
     .from("users")
-    .select("id, university_id, roles!inner(name)")
+    .select("id, university_id, roles!users_role_id_fkey!inner(name)")
     .eq("id", authUser.id)
     .single();
 

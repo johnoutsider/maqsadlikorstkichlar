@@ -24,7 +24,7 @@ export async function POST(req: Request, context: RouteContext) {
 
   const { data: profile } = await supabase
     .from("users")
-    .select("university_id, roles!inner(name)")
+    .select("university_id, roles!users_role_id_fkey!inner(name)")
     .eq("id", authUser.id)
     .maybeSingle();
 

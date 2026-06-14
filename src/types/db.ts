@@ -48,6 +48,7 @@ export type RoleName =
   | "dean"
   | "staff_manager"
   | "oquv_bolimi"
+  | "monitor"
   | "doktorant"
   | "supervisor"
   | (string & {});
@@ -165,10 +166,18 @@ export interface Notification {
   created_at: string;
 }
 
+export interface GrantedRole {
+  role_id: string;
+  name: RoleName;
+  scope: RoleScope;
+  is_primary: boolean;
+}
+
 // Enriched user used by the auth context — joins role + scope info.
 export interface CurrentUser extends AppUser {
   role: RoleName;
   role_scope: RoleScope;
+  roles_granted: GrantedRole[];
 }
 
 export interface Supervisor {
@@ -213,6 +222,7 @@ export interface Izlanuvchi {
   id: string;
   university_id: string;
   turi: IzlanuvchiTuri;
+  department_id: string | null;
   source_no: string | null;
   full_name: string;
   specialty_name: string | null;
@@ -238,6 +248,44 @@ export interface Izlanuvchi {
   metadata: Record<string, unknown>;
   created_at: string;
   updated_at: string;
+}
+
+export type MonitoringResearcherSource = "doktorantlar" | "izlanuvchilar";
+
+export interface MonitoringEvaluation {
+  id: string;
+  university_id: string;
+  researcher_source: MonitoringResearcherSource;
+  doktorant_id: string | null;
+  izlanuvchi_id: string | null;
+  department_id: string | null;
+  full_name: string;
+  education_level: string | null;
+  specialty_code: string | null;
+  research_topic: string | null;
+  advisor_name: string | null;
+  monitoring_period: string;
+  raw_score: number;
+  scored_item_count: number;
+  average_score: number;
+  total_score: number;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MonitoringEvaluationItem {
+  id: string;
+  evaluation_id: string;
+  section_no: number;
+  section_title: string;
+  criterion_key: string;
+  indicator_label: string;
+  max_score: number;
+  score: number | null;
+  comment: string | null;
+  disabled: boolean;
+  created_at: string;
 }
 
 export type RecommendationStatus = "davom_etsin" | "qayta_korib_chiqsin" | "muddatni_uzaytirsin";

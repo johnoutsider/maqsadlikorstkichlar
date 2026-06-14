@@ -19,7 +19,7 @@ export async function notifyRolesByTelegram(
 ): Promise<void> {
   let query = admin
     .from("users")
-    .select("id, phone, roles!inner(name)")
+    .select("id, phone, roles!users_role_id_fkey!inner(name)")
     .eq("university_id", args.universityId)
     .in("roles.name", args.roles);
 

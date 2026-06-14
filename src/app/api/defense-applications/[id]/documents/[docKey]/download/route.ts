@@ -40,7 +40,7 @@ export async function GET(_request: Request, context: RouteContext) {
 
   const { data: profile, error: profileError } = await supabase
     .from("users")
-    .select("university_id, department_id, roles!inner(name)")
+    .select("university_id, department_id, roles!users_role_id_fkey!inner(name)")
     .eq("id", authUser.id)
     .maybeSingle();
 

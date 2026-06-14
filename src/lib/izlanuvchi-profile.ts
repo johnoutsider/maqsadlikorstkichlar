@@ -13,6 +13,7 @@ export type IzlanuvchiMetadata = {
 
 export type IzlanuvchiFormState = {
   turi: IzlanuvchiTuri;
+  departmentId: string;
   lastName: string;
   firstName: string;
   middleName: string;
@@ -47,6 +48,7 @@ export type IzlanuvchiFormState = {
 export function emptyIzlanuvchiForm(turi: IzlanuvchiTuri): IzlanuvchiFormState {
   return {
     turi,
+    departmentId: "",
     lastName: "",
     firstName: "",
     middleName: "",
@@ -89,6 +91,7 @@ export function formFromIzlanuvchi(row: Izlanuvchi): IzlanuvchiFormState {
   return {
     ...emptyIzlanuvchiForm(row.turi),
     turi: row.turi,
+    departmentId: row.department_id ?? "",
     lastName: name.lastName,
     firstName: name.firstName,
     middleName: name.middleName,
@@ -126,6 +129,7 @@ export function buildIzlanuvchiPayload(form: IzlanuvchiFormState) {
 
   return {
     turi: form.turi,
+    department_id: form.departmentId || null,
     full_name: buildFullName(form.lastName, form.firstName, form.middleName),
     specialty_name: form.specialtyName.trim() || null,
     specialty_code: form.specialtyCode.trim() || null,

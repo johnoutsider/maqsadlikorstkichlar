@@ -36,7 +36,7 @@ export default function FacultiesPage() {
       supabase.from("faculties").select("*").eq("university_id", user.university_id).order("short_code"),
       supabase
         .from("users")
-        .select("*, roles!inner(name)")
+        .select("*, roles!users_role_id_fkey!inner(name)")
         .eq("university_id", user.university_id),
     ]);
     if (fErr) setError(fErr.message);

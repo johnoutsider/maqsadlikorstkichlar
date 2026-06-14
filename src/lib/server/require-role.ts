@@ -19,7 +19,7 @@ export async function requireRole(
 
   const { data: profile } = await supabase
     .from("users")
-    .select("id, university_id, faculty_id, department_id, display_name, roles!inner(name)")
+    .select("id, university_id, faculty_id, department_id, display_name, roles!users_role_id_fkey!inner(name)")
     .eq("id", authUser.id)
     .maybeSingle();
 

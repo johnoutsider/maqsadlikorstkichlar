@@ -35,7 +35,9 @@
       "PowerShell(cd \"C:\\\\Users\\\\Jakhongir Khasanov\\\\.claude\\\\skills\\\\notebooklm\"; $env:PYTHONIOENCODING=\"utf-8\"; python scripts/run.py auth_manager.py status)",
       "Bash(Get-ChildItem -Path \"D:\\\\Coding\\\\Antigravity folder\\\\maqsadlikorstkichlar\" -Force)",
       "Bash(Select-Object Name, PSIsContainer)",
-      "Bash(xargs grep -l \"submission\")"
+      "Bash(xargs grep -l \"submission\")",
+      "Bash(env)",
+      "Bash(find / -maxdepth 6 -iname \"*supabase*\" 2>/dev/null | grep -v node_modules | grep -v \"/proc/\" ; echo \"---\"; find ~ -maxdepth 5 -iname \"*.supabase*\" 2>/dev/null)"
     ]
   }
 }
