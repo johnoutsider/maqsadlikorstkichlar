@@ -51,13 +51,20 @@ export function MonitoringResultsTable() {
     setLoading(true);
     setError("");
 
-    const { data, error: databaseError } = await supabase
+    let request = supabase
       .from("monitoring_evaluations")
       .select(
         "*, departments(name), monitoring_evaluation_items(*), assessor:users!monitoring_evaluations_created_by_fkey(display_name,email)"
       )
-      .eq("university_id", user.university_id)
-      .order("created_at", { ascending: false });
+      .eq("university_id", user.university_id);
+
+    if (user.role === "monitor") {
+      request = request.eq("created_by", user.id);
+    }
+
+    const { data, error: databaseError } = await request.order("created_at", {
+      ascending: false,
+    });
 
     if (databaseError) {
       setError(databaseError.message);
@@ -66,7 +73,7 @@ export function MonitoringResultsTable() {
       setRows((data as ResultRow[] | null) ?? []);
     }
     setLoading(false);
-  }, [supabase, user?.university_id]);
+  }, [supabase, user?.id, user?.role, user?.university_id]);
 
   useEffect(() => {
     load();
