@@ -207,6 +207,39 @@ export interface Doktorant {
   updated_at: string;
 }
 
+export type IzlanuvchiTuri = "doktorant" | "mustaqil";
+
+export interface Izlanuvchi {
+  id: string;
+  university_id: string;
+  turi: IzlanuvchiTuri;
+  source_no: string | null;
+  full_name: string;
+  specialty_name: string | null;
+  specialty_code: string | null;
+  education_stage: string | null;
+  admission_year: string | null;
+  age: number | null;
+  gender: "erkak" | "ayol" | null;
+  pinfl: string | null;
+  submission_date: string | null;
+  course: string | null;
+  monitoring_1: string | null;
+  monitoring_2: string | null;
+  monitoring_3: string | null;
+  district: string | null;
+  research_topic: string | null;
+  supervisor_name: string | null;
+  status: string | null;
+  talim_tili: string | null;
+  chorak: string | null;
+  phone: string | null;
+  himoya_holati: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
 export type RecommendationStatus = "davom_etsin" | "qayta_korib_chiqsin" | "muddatni_uzaytirsin";
 
 export interface Evaluation {

@@ -138,8 +138,13 @@ const NAV: NavItem[] = [
     roles: ["science_department", "supervisor", "doktorant"],
     children: [
       {
-        href: "/doktorantura",
-        label: "Doktorantlar",
+        href: "/izlanuvchilar/doktorant",
+        label: "Doktorant va stajor-tadqiqotchilar",
+        roles: ["science_department"],
+      },
+      {
+        href: "/izlanuvchilar/mustaqil",
+        label: "Mustaqil izlanuvchilar",
         roles: ["science_department"],
       },
       {
@@ -183,7 +188,7 @@ const NAV: NavItem[] = [
     href: "/himoya-arizalari",
     label: "Himoya arizalari",
     icon: <Icon d="M9 12h6m-6 4h6m-7 5h8a2 2 0 002-2V7.414a1 1 0 00-.293-.707l-3.414-3.414A1 1 0 0013.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />,
-    roles: ["science_department", "vice_rector"],
+    roles: ["science_department", "vice_rector", "staff_manager"],
   },
   {
     href: "/universities",
