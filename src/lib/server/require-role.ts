@@ -2,6 +2,7 @@ import "server-only";
 
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { roleHome } from "@/lib/role-home";
 import type { RoleName } from "@/types/db";
 
 export async function requireRole(
@@ -25,7 +26,7 @@ export async function requireRole(
 
   const role = ((profile as any)?.roles?.name ?? null) as RoleName | null;
   if (!profile || !role || !allowed.includes(role)) {
-    redirect(fallbackFor?.(role) ?? "/overview");
+    redirect(fallbackFor?.(role) ?? roleHome(role ?? undefined));
   }
 
   return { authUser, profile, role };

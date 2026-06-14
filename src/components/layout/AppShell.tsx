@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useSupabaseAuth } from "@/contexts/SupabaseAuthContext";
 import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
+import { roleHome } from "@/lib/role-home";
 import type { RoleName, University } from "@/types/db";
 
 export interface UniversityBrand {
@@ -99,7 +100,7 @@ export function AppShell({
       return;
     }
     if (!allowed.includes(user.role)) {
-      router.replace(fallbackFor ? fallbackFor(user.role) : "/overview");
+      router.replace(fallbackFor ? fallbackFor(user.role) : roleHome(user.role));
     }
   }, [user, loading, router, allowed, fallbackFor]);
 

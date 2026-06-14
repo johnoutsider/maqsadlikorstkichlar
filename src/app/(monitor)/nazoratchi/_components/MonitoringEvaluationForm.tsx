@@ -2,6 +2,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { useSupabaseAuth } from "@/contexts/SupabaseAuthContext";
@@ -10,6 +11,7 @@ import { MONITORING_RUBRIC } from "@/lib/monitoring-rubric";
 import type {
   Department,
   IzlanuvchiTuri,
+  MonitoringEvaluationItem,
   MonitoringResearcherSource,
 } from "@/types/db";
 
@@ -37,9 +39,7 @@ type EvaluationForm = {
 };
 
 function currentMonitoringPeriod() {
-  const now = new Date();
-  const quarter = Math.floor(now.getMonth() / 3) + 1;
-  return `${now.getFullYear()}-yil, ${quarter}-chorak`;
+  return "2026 yil, 1 yarim yillik hisobot";
 }
 
 const EMPTY_FORM: EvaluationForm = {
@@ -94,9 +94,14 @@ function Field({
   );
 }
 
-export function MonitoringEvaluationForm() {
+export function MonitoringEvaluationForm({
+  evaluationId,
+}: {
+  evaluationId?: string;
+}) {
   const supabaseRef = useRef(createClient());
   const supabase = supabaseRef.current;
+  const router = useRouter();
   const { user } = useSupabaseAuth();
   // The monitor works entirely off the izlanuvchilar table; the radio selects
   // which turi (doktorant vs mustaqil) to search within it.
@@ -111,7 +116,12 @@ export function MonitoringEvaluationForm() {
   const [scores, setScores] = useState<Record<string, number>>({});
   const [comments, setComments] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
+  const [editLoading, setEditLoading] = useState(Boolean(evaluationId));
   const [error, setError] = useState("");
+  const scoreInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  const commentInputRefs = useRef<Record<string, HTMLTextAreaElement | null>>(
+    {}
+  );
   const [savedResult, setSavedResult] = useState<{
     id: string;
     total: number;
@@ -136,6 +146,102 @@ export function MonitoringEvaluationForm() {
   }, [supabase, user?.university_id]);
 
   useEffect(() => {
+    if (!evaluationId) {
+      setEditLoading(false);
+      return;
+    }
+    if (!user?.university_id) return;
+
+    let cancelled = false;
+    const currentUserId = user.id;
+    const universityId = user.university_id;
+
+    async function loadEvaluation() {
+      setEditLoading(true);
+      setError("");
+
+      const { data, error: loadError } = await supabase
+        .from("monitoring_evaluations")
+        .select("*, monitoring_evaluation_items(*)")
+        .eq("id", evaluationId)
+        .eq("university_id", universityId)
+        .maybeSingle();
+
+      if (cancelled) return;
+      if (loadError || !data) {
+        setError(
+          loadError?.message ?? "Tahrirlanadigan monitoring natijasi topilmadi."
+        );
+        setEditLoading(false);
+        return;
+      }
+      if (data.created_by !== currentUserId) {
+        setError("Bu monitoring natijasini tahrirlashga ruxsat yo'q.");
+        setEditLoading(false);
+        return;
+      }
+
+      const researcherId =
+        data.researcher_source === "doktorantlar"
+          ? data.doktorant_id
+          : data.izlanuvchi_id;
+      if (!researcherId) {
+        setError("Monitoring natijasiga bog'langan izlanuvchi topilmadi.");
+        setEditLoading(false);
+        return;
+      }
+
+      setSelected({
+        id: researcherId,
+        source: data.researcher_source as MonitoringResearcherSource,
+        fullName: data.full_name,
+        identifier: researcherId,
+        departmentId: data.department_id ?? "",
+        departmentName: "",
+        level: data.education_level ?? "PhD",
+        specialtyCode: data.specialty_code ?? "",
+        researchTopic: data.research_topic ?? "",
+        advisor: data.advisor_name ?? "",
+      });
+      setSearchQuery(data.full_name);
+      setForm({
+        fullName: data.full_name,
+        departmentId: data.department_id ?? "",
+        level: data.education_level ?? "PhD",
+        specialtyCode: data.specialty_code ?? "",
+        researchTopic: data.research_topic ?? "",
+        advisor: data.advisor_name ?? "",
+        period: data.monitoring_period,
+      });
+
+      const nextScores: Record<string, number> = {};
+      const nextComments: Record<string, string> = {};
+      (
+        (data.monitoring_evaluation_items as MonitoringEvaluationItem[]) ?? []
+      ).forEach((item) => {
+        if (!item.disabled && item.score !== null) {
+          nextScores[item.criterion_key] = item.score <= 2 ? 2 : item.score;
+        }
+        if (item.comment) nextComments[item.criterion_key] = item.comment;
+      });
+      setScores(nextScores);
+      setComments(nextComments);
+      setEditLoading(false);
+    }
+
+    loadEvaluation();
+    return () => {
+      cancelled = true;
+    };
+  }, [evaluationId, supabase, user?.id, user?.university_id]);
+
+  useEffect(() => {
+    if (evaluationId) {
+      setSearchResults([]);
+      setSearching(false);
+      return;
+    }
+
     const query = searchQuery.trim();
     if (!user?.university_id || query.length < 2) {
       setSearchResults([]);
@@ -214,9 +320,31 @@ export function MonitoringEvaluationForm() {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [searchQuery, researcherTuri, supabase, user?.university_id]);
+  }, [
+    evaluationId,
+    searchQuery,
+    researcherTuri,
+    supabase,
+    user?.university_id,
+  ]);
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      Object.values(commentInputRefs.current).forEach((element) => {
+        if (element) resizeCommentField(element);
+      });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [comments]);
 
   const isDsc = form.level === "DSc";
+  const activeItemKeys = useMemo(
+    () =>
+      MONITORING_RUBRIC.flatMap((section) => section.items)
+        .filter((item) => !item.dscOnly || isDsc)
+        .map((item) => item.key),
+    [isDsc]
+  );
   const stats = useMemo(() => {
     let sum = 0;
     let count = 0;
@@ -225,7 +353,7 @@ export function MonitoringEvaluationForm() {
       section.items.forEach((item) => {
         if (item.dscOnly && !isDsc) return;
         if (scores[item.key] === undefined) return;
-        sum += scores[item.key];
+        sum += scores[item.key] <= 2 ? 0 : scores[item.key];
         count += 1;
       });
     });
@@ -248,6 +376,9 @@ export function MonitoringEvaluationForm() {
   }
 
   function resetEvaluation() {
+    if (evaluationId) {
+      router.replace("/nazoratchi/baholash");
+    }
     setSearchQuery("");
     setSearchResults([]);
     setSelected(null);
@@ -256,6 +387,7 @@ export function MonitoringEvaluationForm() {
     setComments({});
     setError("");
     setSavedResult(null);
+    setEditLoading(false);
   }
 
   function selectResearcher(result: SearchResult) {
@@ -287,10 +419,63 @@ export function MonitoringEvaluationForm() {
     }
 
     const parsed = Number.parseInt(value, 10);
-    const score = Number.isFinite(parsed)
+    const clampedScore = Number.isFinite(parsed)
       ? Math.max(0, Math.min(maxScore, parsed))
       : 0;
+    const score = clampedScore <= 2 ? 2 : clampedScore;
     setScores((current) => ({ ...current, [key]: score }));
+  }
+
+  function handleScoreTab(
+    event: React.KeyboardEvent<HTMLInputElement>,
+    key: string
+  ) {
+    if (event.key !== "Tab") return;
+
+    const currentIndex = activeItemKeys.indexOf(key);
+    if (event.shiftKey) {
+      if (currentIndex <= 0) return;
+      event.preventDefault();
+      scoreInputRefs.current[activeItemKeys[currentIndex - 1]]?.focus();
+      return;
+    }
+
+    event.preventDefault();
+    if (currentIndex < activeItemKeys.length - 1) {
+      scoreInputRefs.current[activeItemKeys[currentIndex + 1]]?.focus();
+    } else {
+      commentInputRefs.current[activeItemKeys[0]]?.focus();
+    }
+  }
+
+  function handleCommentTab(
+    event: React.KeyboardEvent<HTMLTextAreaElement>,
+    key: string
+  ) {
+    if (event.key !== "Tab") return;
+
+    const currentIndex = activeItemKeys.indexOf(key);
+    if (event.shiftKey) {
+      event.preventDefault();
+      if (currentIndex > 0) {
+        commentInputRefs.current[activeItemKeys[currentIndex - 1]]?.focus();
+      } else {
+        scoreInputRefs.current[
+          activeItemKeys[activeItemKeys.length - 1]
+        ]?.focus();
+      }
+      return;
+    }
+
+    if (currentIndex < activeItemKeys.length - 1) {
+      event.preventDefault();
+      commentInputRefs.current[activeItemKeys[currentIndex + 1]]?.focus();
+    }
+  }
+
+  function resizeCommentField(element: HTMLTextAreaElement) {
+    element.style.height = "auto";
+    element.style.height = `${Math.max(40, element.scrollHeight)}px`;
   }
 
   async function saveEvaluation() {
@@ -330,30 +515,39 @@ export function MonitoringEvaluationForm() {
       }
     }
 
-    const { data: evaluation, error: evaluationError } = await supabase
-      .from("monitoring_evaluations")
-      .insert({
-        university_id: user.university_id,
-        researcher_source: selected.source,
-        doktorant_id:
-          selected.source === "doktorantlar" ? selected.id : null,
-        izlanuvchi_id:
-          selected.source === "izlanuvchilar" ? selected.id : null,
-        department_id: form.departmentId,
-        full_name: form.fullName,
-        education_level: form.level,
-        specialty_code: form.specialtyCode.trim() || null,
-        research_topic: form.researchTopic.trim() || null,
-        advisor_name: form.advisor.trim() || null,
-        monitoring_period: form.period.trim(),
-        raw_score: stats.sum,
-        scored_item_count: stats.count,
-        average_score: stats.average,
-        total_score: stats.total100,
-        created_by: user.id,
-      })
-      .select("id")
-      .single();
+    const evaluationValues = {
+      department_id: form.departmentId,
+      full_name: form.fullName,
+      education_level: form.level,
+      specialty_code: form.specialtyCode.trim() || null,
+      research_topic: form.researchTopic.trim() || null,
+      advisor_name: form.advisor.trim() || null,
+      monitoring_period: form.period.trim(),
+      raw_score: stats.sum,
+      scored_item_count: stats.count,
+      average_score: stats.average,
+      total_score: stats.total100,
+    };
+
+    const evaluationRequest = evaluationId
+      ? supabase
+          .from("monitoring_evaluations")
+          .update(evaluationValues)
+          .eq("id", evaluationId)
+          .eq("created_by", user.id)
+      : supabase.from("monitoring_evaluations").insert({
+          ...evaluationValues,
+          university_id: user.university_id,
+          researcher_source: selected.source,
+          doktorant_id:
+            selected.source === "doktorantlar" ? selected.id : null,
+          izlanuvchi_id:
+            selected.source === "izlanuvchilar" ? selected.id : null,
+          created_by: user.id,
+        });
+
+    const { data: evaluation, error: evaluationError } =
+      await evaluationRequest.select("id").single();
 
     if (evaluationError || !evaluation) {
       setSaving(false);
@@ -382,13 +576,15 @@ export function MonitoringEvaluationForm() {
 
     const { error: itemsError } = await supabase
       .from("monitoring_evaluation_items")
-      .insert(items);
+      .upsert(items, { onConflict: "evaluation_id,criterion_key" });
 
     if (itemsError) {
-      await supabase
-        .from("monitoring_evaluations")
-        .delete()
-        .eq("id", evaluation.id);
+      if (!evaluationId) {
+        await supabase
+          .from("monitoring_evaluations")
+          .delete()
+          .eq("id", evaluation.id);
+      }
       setSaving(false);
       setError(itemsError.message);
       return;
@@ -406,7 +602,9 @@ export function MonitoringEvaluationForm() {
             Nazoratchi
           </p>
           <h1 className="mt-1 text-3xl font-extrabold text-slate-900 dark:text-surface-100">
-            Izlanuvchilar faoliyatini baholash
+            {evaluationId
+              ? "Monitoring natijasini tahrirlash"
+              : "Izlanuvchilar faoliyatini baholash"}
           </h1>
           <p className="mt-2 max-w-3xl text-sm text-slate-500 dark:text-surface-400">
             Oliy ta&apos;limdan keyingi ta&apos;lim bo&apos;yicha faoliyat
@@ -429,7 +627,14 @@ export function MonitoringEvaluationForm() {
         </div>
       )}
 
-      <section className="mb-7 rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-surface-700 dark:bg-surface-800">
+      {editLoading && (
+        <div className="mb-7 rounded-xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500 shadow-sm dark:border-surface-700 dark:bg-surface-800">
+          Monitoring natijasi yuklanmoqda...
+        </div>
+      )}
+
+      {!evaluationId && (
+        <section className="mb-7 rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-surface-700 dark:bg-surface-800">
         <h2 className="mb-4 text-base font-bold text-slate-800 dark:text-surface-100">
           Izlanuvchini qidirish
         </h2>
@@ -536,7 +741,19 @@ export function MonitoringEvaluationForm() {
             ? `Tanlandi: ${selected.fullName}`
             : "Natijadan izlanuvchini tanlang, ma'lumotlari forma ichiga avtomatik tushadi."}
         </p>
-      </section>
+        </section>
+      )}
+
+      {evaluationId && !editLoading && selected && (
+        <section className="mb-7 rounded-xl border border-blue-200 bg-blue-50 px-5 py-4 dark:border-blue-900 dark:bg-blue-950/30">
+          <p className="text-xs font-bold uppercase tracking-[0.08em] text-blue-700">
+            Tahrirlanmoqda
+          </p>
+          <p className="mt-1 font-semibold text-slate-900 dark:text-surface-100">
+            {selected.fullName}
+          </p>
+        </section>
+      )}
 
       <section className="mb-8 grid grid-cols-1 gap-5 rounded-xl border border-slate-200 bg-slate-50 p-5 md:grid-cols-2 dark:border-surface-700 dark:bg-surface-800">
         <Field label="F.I.Sh." value={form.fullName} readOnly />
@@ -623,7 +840,7 @@ export function MonitoringEvaluationForm() {
               </th>
               <th className="w-24 border border-slate-700 p-3">Maks ball</th>
               <th className="w-28 border border-slate-700 p-3">Ball</th>
-              <th className="w-1/5 border border-slate-700 p-3">Izoh</th>
+              <th className="w-1/4 border border-slate-700 p-3">Izoh</th>
             </tr>
           </thead>
           <tbody>
@@ -669,12 +886,15 @@ export function MonitoringEvaluationForm() {
                       </td>
                       <td className="border border-slate-300 bg-white p-2 dark:border-surface-600 dark:bg-surface-800">
                         <input
+                          ref={(element) => {
+                            scoreInputRefs.current[item.key] = element;
+                          }}
                           type="number"
                           min={0}
                           max={item.maxScore}
+                          step={1}
                           disabled={disabled}
                           value={scores[item.key] ?? ""}
-                          placeholder="0"
                           onChange={(event) =>
                             updateScore(
                               item.key,
@@ -682,22 +902,34 @@ export function MonitoringEvaluationForm() {
                               item.maxScore
                             )
                           }
-                          className="w-full rounded border border-slate-300 p-2 text-center font-bold text-blue-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 disabled:bg-slate-200 dark:border-surface-600 dark:bg-surface-700"
+                          onKeyDown={(event) =>
+                            handleScoreTab(event, item.key)
+                          }
+                          className="w-full appearance-none rounded border border-slate-300 p-2 text-center font-bold text-blue-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 disabled:bg-slate-200 dark:border-surface-600 dark:bg-surface-700 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                         />
                       </td>
                       <td className="border border-slate-300 bg-white p-2 align-top dark:border-surface-600 dark:bg-surface-800">
                         <textarea
+                          ref={(element) => {
+                            commentInputRefs.current[item.key] = element;
+                          }}
                           rows={1}
+                          wrap="soft"
+                          tabIndex={-1}
                           disabled={disabled}
                           value={comments[item.key] ?? ""}
                           placeholder="Izoh..."
-                          onChange={(event) =>
+                          onChange={(event) => {
+                            resizeCommentField(event.currentTarget);
                             setComments((current) => ({
                               ...current,
                               [item.key]: event.target.value,
-                            }))
+                            }));
+                          }}
+                          onKeyDown={(event) =>
+                            handleCommentTab(event, item.key)
                           }
-                          className="min-h-10 w-full resize-y rounded border border-slate-300 p-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 disabled:bg-slate-200 dark:border-surface-600 dark:bg-surface-700"
+                          className="min-h-10 w-full resize-y overflow-hidden whitespace-pre-wrap break-words rounded border border-slate-300 p-2 text-sm leading-relaxed outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 disabled:bg-slate-200 dark:border-surface-600 dark:bg-surface-700"
                         />
                       </td>
                     </tr>
@@ -743,7 +975,7 @@ export function MonitoringEvaluationForm() {
         <Button
           size="lg"
           isLoading={saving}
-          disabled={!selected}
+          disabled={!selected || editLoading}
           onClick={saveEvaluation}
         >
           <svg
@@ -757,14 +989,18 @@ export function MonitoringEvaluationForm() {
             <path d="M5 3h12l2 2v16H5V3z" />
             <path d="M8 3v6h8V3M8 21v-7h8v7" />
           </svg>
-          Saqlash
+          {evaluationId ? "O'zgarishlarni saqlash" : "Saqlash"}
         </Button>
       </div>
 
       <Modal
         isOpen={Boolean(savedResult)}
         onClose={() => setSavedResult(null)}
-        title="Monitoring natijasi saqlandi"
+        title={
+          evaluationId
+            ? "Monitoring natijasi yangilandi"
+            : "Monitoring natijasi saqlandi"
+        }
       >
         {savedResult && (
           <div className="space-y-5">

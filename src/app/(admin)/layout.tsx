@@ -6,9 +6,7 @@ import type { RoleName } from "@/types/db";
 const ALLOWED: RoleName[] = ["university_admin", "vice_rector", "science_department", "dean"];
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
-  await requireRole(ALLOWED, (role) =>
-    role === "super_admin" ? "/universities" : role === "staff_manager" ? "/form" : "/login"
-  );
+  await requireRole(ALLOWED);
 
   return (
     <AppShell allowed={ALLOWED}>

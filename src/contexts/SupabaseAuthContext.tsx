@@ -211,10 +211,9 @@ export function SupabaseAuthProvider({ children }: { children: React.ReactNode }
         p_role_id: grant.role_id,
       });
       if (error) return { error: error.message };
-      await refresh();
       return { error: null };
     },
-    [supabase, user, refresh]
+    [supabase, user]
   );
 
   return (

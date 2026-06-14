@@ -11,7 +11,7 @@ import { roleHome } from "@/lib/role-home";
 
 export default function LoginPage() {
   const router = useRouter();
-  const { signIn, signOut, authUser, user, loading, profileLoading, refresh } = useSupabaseAuth();
+  const { signIn, signOut, authUser, user, loading, profileLoading } = useSupabaseAuth();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -27,18 +27,27 @@ export default function LoginPage() {
         justSignedIn.current = false;
         const supabase = createClient();
         (async () => {
-          await supabase.rpc("reset_to_primary_role");
-          await refresh();
-          router.push(roleHome(user.role));
+          const primaryRole =
+            user.roles_granted.find((grant) => grant.is_primary)?.name ?? user.role;
+          const { error: resetError } = await supabase.rpc("reset_to_primary_role");
+          if (resetError) {
+            console.error("[Login] Failed to reset primary role:", resetError);
+            router.replace(roleHome(user.role));
+            return;
+          }
+
+          // Reload from the primary role so server guards and client profile
+          // start from the same database state.
+          window.location.replace(roleHome(primaryRole));
         })();
         return;
       }
-      router.push(roleHome(user.role));
+      router.replace(roleHome(user.role));
     } else if (authUser && !user) {
       signOut();
       setError("Profilingiz topilmadi. Qaytadan kiring.");
     }
-  }, [authUser, user, loading, profileLoading, router, signOut, refresh]);
+  }, [authUser, user, loading, profileLoading, router, signOut]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

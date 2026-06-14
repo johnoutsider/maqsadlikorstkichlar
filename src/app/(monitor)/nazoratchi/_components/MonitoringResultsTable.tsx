@@ -105,7 +105,7 @@ export function MonitoringResultsTable() {
   }, [period, rows, search, source]);
 
   async function remove(row: ResultRow) {
-    if (row.created_by !== user?.id) return;
+    if (user?.role !== "science_department") return;
     if (
       !confirm(
         `"${row.full_name}" uchun ${row.monitoring_period} natijasini o'chirasizmi?`
@@ -306,7 +306,15 @@ export function MonitoringResultsTable() {
                         >
                           Ko&apos;rish
                         </Button>
-                        {row.created_by === user?.id && (
+                        {user?.role === "monitor" &&
+                          row.created_by === user.id && (
+                            <Link
+                              href={`/nazoratchi/baholash?edit=${row.id}`}
+                            >
+                              <Button size="sm">Tahrirlash</Button>
+                            </Link>
+                          )}
+                        {user?.role === "science_department" && (
                           <Button
                             variant="danger"
                             size="sm"

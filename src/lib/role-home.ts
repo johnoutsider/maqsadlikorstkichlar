@@ -7,7 +7,8 @@ export function roleHome(role?: RoleName | string): string {
   if (role === "science_department") return "/targets";
   if (role === "monitor") return "/nazoratchi/natijalar";
   if (role === "vice_rector" || role === "dean") return "/targets";
+  if (role === "oquv_bolimi") return "/overview";
   if (role === "supervisor") return "/doktorantura/mening-talabalarim";
   if (role === "doktorant") return "/doktorantura/mening-profilim";
-  return "/overview";
+  return "/login";
 }

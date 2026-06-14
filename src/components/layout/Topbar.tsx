@@ -50,6 +50,7 @@ export function Topbar({ brand }: { brand: UniversityBrand }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [switching, setSwitching] = useState(false);
+  const [switchError, setSwitchError] = useState("");
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -122,7 +123,10 @@ export function Topbar({ brand }: { brand: UniversityBrand }) {
       <div className="flex items-center gap-3">
         <div className="relative" ref={dropdownRef}>
           <button
-            onClick={() => setOpen((v) => !v)}
+            onClick={() => {
+              setSwitchError("");
+              setOpen((v) => !v);
+            }}
             className="flex items-center gap-2.5 px-3 py-1.5 rounded-xl transition-all"
             style={{
               background: open ? "var(--surface-container)" : "transparent",
@@ -234,12 +238,18 @@ export function Topbar({ brand }: { brand: UniversityBrand }) {
                           key={grant.role_id}
                           disabled={active || switching}
                           onClick={async () => {
+                            setSwitchError("");
                             setSwitching(true);
                             const { error } = await switchRole(grant.name);
-                            setSwitching(false);
-                            if (error) return;
-                            setOpen(false);
-                            router.push(roleHome(grant.name));
+                            if (error) {
+                              setSwitchError(error);
+                              setSwitching(false);
+                              return;
+                            }
+
+                            // A full navigation keeps the old layout from racing
+                            // the new role's server-side route guard.
+                            window.location.replace(roleHome(grant.name));
                           }}
                           className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-sm transition-colors text-left disabled:cursor-default"
                           style={{
@@ -271,6 +281,18 @@ export function Topbar({ brand }: { brand: UniversityBrand }) {
                       );
                     })}
                   </div>
+                  {switchError && (
+                    <p
+                      className="mt-2 rounded-lg px-3 py-2"
+                      style={{
+                        background: "#ffdad6",
+                        color: "#410002",
+                        fontSize: "0.75rem",
+                      }}
+                    >
+                      Rolni almashtirib bo&apos;lmadi: {switchError}
+                    </p>
+                  )}
                 </div>
               )}
 

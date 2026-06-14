@@ -10,9 +10,7 @@ export default async function MonitorLayout({
 }: {
   children: React.ReactNode;
 }) {
-  await requireRole(ALLOWED, (role) =>
-    role === "super_admin" ? "/universities" : "/overview"
-  );
+  await requireRole(ALLOWED);
 
   return <AppShell allowed={ALLOWED}>{children}</AppShell>;
 }
