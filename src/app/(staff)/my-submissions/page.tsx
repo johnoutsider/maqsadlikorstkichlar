@@ -14,17 +14,17 @@ export default function MySubmissionsPage() {
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
-    if (!user?.department_id) return;
+    if (!user?.id) return;
     setLoading(true);
     const { data } = await supabase
       .from("submissions")
       .select("*")
-      .eq("department_id", user.department_id)
+      .eq("submitted_by", user.id)
       .order("year", { ascending: false })
       .order("quarter", { ascending: false });
     setRows((((data as Submission[]) ?? []).map((row) => normalizeSubmission(row)!)));
     setLoading(false);
-  }, [supabase, user?.department_id]);
+  }, [supabase, user?.id]);
 
   useEffect(() => { load(); }, [load]);
 

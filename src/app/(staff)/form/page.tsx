@@ -91,12 +91,12 @@ export default function FormPage() {
   // (needs_revision > rejected > any most recent), jump to that period
   // so they aren't staring at a blank current-quarter form.
   useEffect(() => {
-    if (periodInit || !user?.department_id) return;
+    if (periodInit || !user?.id) return;
     (async () => {
       const { data } = await supabase
         .from("submissions")
         .select("year, quarter, status, updated_at")
-        .eq("department_id", user.department_id)
+        .eq("submitted_by", user.id)
         .order("updated_at", { ascending: false });
       const rows = (data as { year: number; quarter: Quarter; status: string }[]) ?? [];
       const priority =
@@ -109,10 +109,10 @@ export default function FormPage() {
       }
       setPeriodInit(true);
     })();
-  }, [user?.department_id, periodInit, supabase]);
+  }, [user?.id, periodInit, supabase]);
 
   const load = useCallback(async () => {
-    if (!user?.department_id) return;
+    if (!user?.id || !user?.department_id) return;
     setLoading(true);
     setError("");
     setMessage("");
@@ -120,7 +120,7 @@ export default function FormPage() {
       supabase
         .from("submissions")
         .select("*")
-        .eq("department_id", user.department_id)
+        .eq("submitted_by", user.id)
         .eq("year", year)
         .eq("quarter", quarter)
         .maybeSingle(),
@@ -170,7 +170,7 @@ export default function FormPage() {
     setValues(v);
     setFiles(f);
     setLoading(false);
-  }, [user?.department_id, year, quarter, indicators, supabase]);
+  }, [user?.id, user?.department_id, year, quarter, indicators, supabase]);
 
   useEffect(() => {
     if (indicators.length > 0) load();
@@ -263,7 +263,7 @@ export default function FormPage() {
     setBusyAction(newStatus === "pending_dean" ? "submit" : "draft");
     const { error: e } = await supabase
       .from("submissions")
-      .upsert(payload, { onConflict: "department_id,year,quarter" });
+      .upsert(payload, { onConflict: "submitted_by,year,quarter" });
     setBusyAction(null);
     if (e) { setError(e.message); return; }
     if (newStatus === "pending_dean" && user?.university_id && user?.faculty_id) {
@@ -271,7 +271,7 @@ export default function FormPage() {
       const { data: sub } = await supabase
         .from("submissions")
         .select("id")
-        .eq("department_id", user.department_id!)
+        .eq("submitted_by", user.id)
         .eq("year", year)
         .eq("quarter", quarter)
         .maybeSingle();

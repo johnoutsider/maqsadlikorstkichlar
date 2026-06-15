@@ -21,6 +21,7 @@ export default function SubmissionsListPage() {
   );
 
   const [rows, setRows] = useState<Submission[]>([]);
+  const [submitterMap, setSubmitterMap] = useState<Map<string, string>>(new Map());
   const [targets, setTargets] = useState<import("@/types/db").Target[]>([]);
   const [indicators, setIndicators] = useState<import("@/types/db").Indicator[]>([]);
   const [faculties, setFaculties] = useState<Faculty[]>([]);
@@ -78,6 +79,23 @@ export default function SubmissionsListPage() {
     } else {
       const subs = (data as Submission[]) ?? [];
       setRows(subs);
+
+      // Fetch the display names of the people who submitted these reports, so
+      // multiple reports from the same kafedra can be told apart.
+      const submitterIds = Array.from(new Set(subs.map((s) => s.submitted_by).filter(Boolean)));
+      if (submitterIds.length > 0) {
+        const { data: people } = await supabase
+          .from("users")
+          .select("id, display_name")
+          .in("id", submitterIds);
+        const map = new Map<string, string>();
+        ((people as { id: string; display_name: string }[]) ?? []).forEach((p) =>
+          map.set(p.id, p.display_name)
+        );
+        setSubmitterMap(map);
+      } else {
+        setSubmitterMap(new Map());
+      }
 
       // Fetch targets for these submissions
       if (subs.length > 0) {
@@ -168,6 +186,7 @@ export default function SubmissionsListPage() {
               <tr>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-surface-600 uppercase">Fakultet</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-surface-600 uppercase">Kafedra</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-surface-600 uppercase">Yuborgan</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-surface-600 uppercase">Davr</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-surface-600 uppercase">Holat</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-surface-600 uppercase">Umumiy Ball</th>
@@ -200,6 +219,7 @@ export default function SubmissionsListPage() {
                   <tr key={s.id} className="hover:bg-surface-50 dark:hover:bg-surface-900/30">
                     <td className="px-4 py-3 text-sm font-mono">{facById.get(s.faculty_id)?.short_code ?? "?"}</td>
                     <td className="px-4 py-3 text-sm">{depById.get(s.department_id)?.name ?? "?"}</td>
+                    <td className="px-4 py-3 text-sm">{submitterMap.get(s.submitted_by) ?? "—"}</td>
                     <td className="px-4 py-3 text-sm">{s.year} {s.quarter}</td>
                     <td className="px-4 py-3">
                       <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_LABEL[s.status].cls}`}>
