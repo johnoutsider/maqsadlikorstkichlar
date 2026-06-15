@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/Button";
 import type {
   Indicator,
   Submission,
+  SubmissionStatus,
   Quarter,
   IndicatorSubmission,
   AppUser,
@@ -61,12 +62,26 @@ export default function FormPage() {
   const [values, setValues] = useState<Record<string, string>>({});
   const [files, setFiles] = useState<Record<string, string[]>>({});
   const [loading, setLoading] = useState(true);
-  const [busyAction, setBusyAction] = useState<"draft" | "submit" | null>(null);
+  const [busyAction, setBusyAction] = useState<"submit" | null>(null);
   const [uploadingFor, setUploadingFor] = useState<string | null>(null);
   const [uploadErrors, setUploadErrors] = useState<Record<string, string>>({});
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [reviewerMap, setReviewerMap] = useState<Map<string, string>>(new Map());
+
+  // Auto-save: every value edit / file change is persisted automatically, so
+  // there is no manual "save draft" button. Refs mirror the latest values/files
+  // so the debounced + post-upload saves never read stale closure state.
+  const [autoSaveState, setAutoSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const valuesRef = useRef<Record<string, string>>({});
+  const filesRef = useRef<Record<string, string[]>>({});
+  const autoSavingRef = useRef(false);
+  const pendingSaveRef = useRef(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autoPersistRef = useRef<() => void>(() => {});
+  // Pause auto-save while a manual submit is in flight so a late save can't
+  // overwrite the just-submitted status back to draft.
+  const blockAutoSaveRef = useRef(false);
 
   useEffect(() => {
     if (!user?.university_id) return;
@@ -167,8 +182,12 @@ export default function FormPage() {
       v[ind.id] = cell?.value === null || cell?.value === undefined ? "" : String(cell.value);
       f[ind.id] = cell?.files ?? [];
     });
+    valuesRef.current = v;
+    filesRef.current = f;
     setValues(v);
     setFiles(f);
+    setAutoSaveState("idle");
+    blockAutoSaveRef.current = false;
     setLoading(false);
   }, [user?.id, user?.department_id, year, quarter, indicators, supabase]);
 
@@ -208,8 +227,14 @@ export default function FormPage() {
     reviewerMap
   );
 
-  const buildPayload = (newStatus: "draft" | "pending_dean") => {
+  // Build the row to upsert. `lenient` (used by auto-save) keeps a previously
+  // saved value instead of erroring on a half-typed/invalid number, so an
+  // in-progress edit never blocks an auto-save. Reads from refs so debounced
+  // and post-upload saves always see the freshest values/files.
+  const buildPayload = (newStatus: SubmissionStatus, opts?: { lenient?: boolean }) => {
     if (!user?.university_id || !user?.department_id || !user?.faculty_id) return null;
+    const curValues = valuesRef.current;
+    const curFiles = filesRef.current;
 
     // Start from the existing submission's indicators so we preserve locked
     // (already-approved) ones on a revision resubmit. Then overwrite each
@@ -220,17 +245,22 @@ export default function FormPage() {
     for (const ind of indicators) {
       const editable = indicatorEditable(ind.id) || status === "draft" || !submission;
       if (!editable) continue;
-      const raw = values[ind.id]?.trim();
+      const raw = curValues[ind.id]?.trim();
       let value: number | null = null;
       if (raw) {
         const n = Number(raw);
         if (Number.isNaN(n)) {
+          if (opts?.lenient) {
+            value = submission?.indicators?.[ind.id]?.value ?? null;
+          } else {
           setError(`"${ind.no}. ${ind.name}" — son kiriting yoki bo'sh qoldiring.`);
-          return null;
+            return null;
+          }
+        } else {
+          value = n;
         }
-        value = n;
       }
-      indicatorsObj[ind.id] = { value, files: files[ind.id] ?? [] };
+      indicatorsObj[ind.id] = { value, files: curFiles[ind.id] ?? [] };
     }
 
     // On resubmit from a revision state, clear review decisions for indicators
@@ -255,17 +285,19 @@ export default function FormPage() {
     };
   };
 
-  const persist = async (newStatus: "draft" | "pending_dean") => {
+  const persist = async (newStatus: "pending_dean") => {
     setError("");
     setMessage("");
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    blockAutoSaveRef.current = true;
     const payload = buildPayload(newStatus);
-    if (!payload) return;
-    setBusyAction(newStatus === "pending_dean" ? "submit" : "draft");
+    if (!payload) { blockAutoSaveRef.current = false; return; }
+    setBusyAction("submit");
     const { error: e } = await supabase
       .from("submissions")
       .upsert(payload, { onConflict: "submitted_by,year,quarter" });
     setBusyAction(null);
-    if (e) { setError(e.message); return; }
+    if (e) { setError(e.message); blockAutoSaveRef.current = false; return; }
     if (newStatus === "pending_dean" && user?.university_id && user?.faculty_id) {
       const { notifyDeans } = await import("@/lib/notifications");
       const { data: sub } = await supabase
@@ -290,6 +322,38 @@ export default function FormPage() {
     );
     load();
   };
+
+  // ── Auto-save ────────────────────────────────────────────────────────────
+  // Persist the current form silently, keeping the current status (a brand-new
+  // form becomes a draft; a returned report stays needs_revision/rejected so
+  // the user can keep working and come back later). Never touches submitted_at
+  // or review decisions. Runs after every file change and (debounced) value
+  // edit, so there is no manual "save draft" button.
+  const autoPersist = async () => {
+    if (blockAutoSaveRef.current || formLocked || !user?.id) return;
+    if (autoSavingRef.current) { pendingSaveRef.current = true; return; }
+    autoSavingRef.current = true;
+    setAutoSaveState("saving");
+    const targetStatus: SubmissionStatus = isRevision ? status : "draft";
+    const payload = buildPayload(targetStatus, { lenient: true });
+    if (!payload) { autoSavingRef.current = false; setAutoSaveState("idle"); return; }
+    const { error: e } = await supabase
+      .from("submissions")
+      .upsert(payload, { onConflict: "submitted_by,year,quarter" });
+    autoSavingRef.current = false;
+    if (e) { setAutoSaveState("error"); return; }
+    setAutoSaveState("saved");
+    if (pendingSaveRef.current) { pendingSaveRef.current = false; void autoPersistRef.current(); }
+  };
+  autoPersistRef.current = autoPersist;
+
+  const scheduleAutoSave = () => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => { void autoPersistRef.current(); }, 800);
+  };
+
+  // Clear any pending debounce timer on unmount.
+  useEffect(() => () => { if (debounceRef.current) clearTimeout(debounceRef.current); }, []);
 
   const setUploadError = (indicatorId: string, msg: string) =>
     setUploadErrors((prev) => ({ ...prev, [indicatorId]: msg }));
@@ -327,17 +391,24 @@ export default function FormPage() {
     const { error: e } = await supabase.storage.from("submissions").upload(path, file);
     setUploadingFor(null);
     if (e) { setUploadError(indicatorId, e.message); return; }
-    setFiles((prev) => ({ ...prev, [indicatorId]: [...(prev[indicatorId] ?? []), path] }));
+    filesRef.current = {
+      ...filesRef.current,
+      [indicatorId]: [...(filesRef.current[indicatorId] ?? []), path],
+    };
+    setFiles({ ...filesRef.current });
+    void autoPersistRef.current();
   };
 
   const removeFile = async (indicatorId: string, path: string) => {
     if (!confirm("Faylni o'chirishni tasdiqlaysizmi?")) return;
     const { error: e } = await supabase.storage.from("submissions").remove([path]);
     if (e) { setError(e.message); return; }
-    setFiles((prev) => ({
-      ...prev,
-      [indicatorId]: (prev[indicatorId] ?? []).filter((p) => p !== path),
-    }));
+    filesRef.current = {
+      ...filesRef.current,
+      [indicatorId]: (filesRef.current[indicatorId] ?? []).filter((p) => p !== path),
+    };
+    setFiles({ ...filesRef.current });
+    void autoPersistRef.current();
   };
 
   const openFile = async (path: string) => {
@@ -485,7 +556,16 @@ export default function FormPage() {
                         type="number"
                         step="any"
                         value={values[ind.id] ?? ""}
-                        onChange={(e) => setValues((p) => ({ ...p, [ind.id]: e.target.value }))}
+                        onChange={(e) => {
+                          const next = e.target.value;
+                          valuesRef.current = { ...valuesRef.current, [ind.id]: next };
+                          setValues((p) => ({ ...p, [ind.id]: next }));
+                          scheduleAutoSave();
+                        }}
+                        onBlur={() => {
+                          if (debounceRef.current) clearTimeout(debounceRef.current);
+                          void autoPersistRef.current();
+                        }}
                         disabled={!editable}
                         className="w-full rounded-md border border-surface-300 dark:border-surface-600 bg-white dark:bg-surface-800 px-2 py-1.5 text-sm disabled:opacity-60"
                       />
@@ -587,12 +667,16 @@ export default function FormPage() {
       )}
 
       {!formLocked && indicators.length > 0 && (
-        <div className="mt-4 flex items-center justify-end gap-2">
-          {!isRevision && (
-            <Button variant="outline" onClick={() => persist("draft")} isLoading={busyAction === "draft"}>
-              Qoralamani saqlash
-            </Button>
-          )}
+        <div className="mt-4 flex items-center justify-end gap-3">
+          <span className="text-xs text-surface-500 dark:text-surface-400" aria-live="polite">
+            {autoSaveState === "saving" && "Saqlanmoqda…"}
+            {autoSaveState === "saved" && "Avtomatik saqlandi ✓"}
+            {autoSaveState === "error" && (
+              <span className="text-danger-600 dark:text-danger-400">
+                Saqlanmadi — internet aloqasini tekshiring
+              </span>
+            )}
+          </span>
           <Button onClick={() => persist("pending_dean")} isLoading={busyAction === "submit"}>
             {isRevision ? "Qayta yuborish" : "Yuborish"}
           </Button>
