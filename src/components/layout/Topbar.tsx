@@ -218,6 +218,25 @@ export function Topbar({ brand }: { brand: UniversityBrand }) {
                 </div>
               </div>
 
+              {/* Profile link */}
+              <div className="p-2" style={{ borderBottom: "1px solid var(--outline-variant)" }}>
+                <button
+                  onClick={() => {
+                    setOpen(false);
+                    router.push("/profil");
+                  }}
+                  className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm transition-colors text-left"
+                  style={{ color: "var(--on-surface)" }}
+                  onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "var(--surface-container-low)"; }}
+                  onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}
+                >
+                  <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  </svg>
+                  Profil
+                </button>
+              </div>
+
               {/* Role switcher */}
               {user.roles_granted.length > 1 && (
                 <div

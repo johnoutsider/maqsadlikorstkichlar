@@ -41,7 +41,14 @@
       "Bash(git commit *)",
       "Bash(rm -f .git/COMMIT_EDITMSG_TMP)",
       "Bash(git ls-remote *)",
-      "Bash(ls vercel.json)"
+      "Bash(ls vercel.json)",
+      "Bash(echo \"EXIT:$?\")",
+      "Bash(npx eslint *)",
+      "mcp__visualize__read_me",
+      "mcp__visualize__show_widget",
+      "Bash(ls .claude/)",
+      "Bash(cat .claude/launch.json)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code} %{redirect_url}\\\\n\" http://localhost:50491/profil)"
     ]
   }
 }

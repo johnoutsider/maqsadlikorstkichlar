@@ -251,6 +251,30 @@ export default function UsersPage() {
     load();
   };
 
+  const [resettingId, setResettingId] = useState<string | null>(null);
+
+  const resetPassword = async (r: Row) => {
+    if (!confirm(`"${r.display_name}" foydalanuvchisining parolini "12345678" ga tiklaysizmi? Foydalanuvchi keyingi kirishda parolni o'zgartirishi shart bo'ladi.`)) {
+      return;
+    }
+
+    setResettingId(r.id);
+    const res = await fetch("/api/users/reset-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: r.id }),
+    });
+    setResettingId(null);
+
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      alert(data?.error ?? `HTTP ${res.status}`);
+      return;
+    }
+
+    alert(`Parol "12345678" ga tiklandi.`);
+  };
+
   const remove = async (r: Row) => {
     if (r.id === user?.id) {
       alert("O'zingizni o'chira olmaysiz.");
@@ -387,9 +411,21 @@ export default function UsersPage() {
                     {assignedName(r)}
                   </td>
                   <td className="px-4 py-3 text-right">
-                    <Button variant="outline" size="sm" onClick={() => openEdit(r)}>
-                      Tahrirlash
-                    </Button>
+                    <div className="flex items-center justify-end gap-2">
+                      {(user?.role === "science_department" || user?.role === "university_admin") && r.id !== user?.id && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          isLoading={resettingId === r.id}
+                          onClick={() => resetPassword(r)}
+                        >
+                          Parolni tiklash
+                        </Button>
+                      )}
+                      <Button variant="outline" size="sm" onClick={() => openEdit(r)}>
+                        Tahrirlash
+                      </Button>
+                    </div>
                   </td>
                 </tr>
               ))}

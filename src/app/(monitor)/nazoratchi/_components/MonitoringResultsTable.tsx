@@ -34,6 +34,16 @@ function scoreClass(score: number) {
   return "bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300";
 }
 
+type Filters = {
+  course: string;
+  admissionYear: string;
+};
+
+const EMPTY_FILTERS: Filters = { course: "", admissionYear: "" };
+
+const selectClass =
+  "h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:border-surface-600 dark:bg-surface-700";
+
 export function MonitoringResultsTable() {
   const supabaseRef = useRef(createClient());
   const supabase = supabaseRef.current;
@@ -44,6 +54,11 @@ export function MonitoringResultsTable() {
   const [search, setSearch] = useState("");
   const [source, setSource] = useState<MonitoringResearcherSource | "">("");
   const [period, setPeriod] = useState("");
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [pendingFilters, setPendingFilters] = useState<Filters>(EMPTY_FILTERS);
+  const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState<10 | 20 | 50 | 100>(10);
   const [viewing, setViewing] = useState<ResultRow | null>(null);
 
   const load = useCallback(async () => {
@@ -87,11 +102,34 @@ export function MonitoringResultsTable() {
     [rows]
   );
 
+  const courseOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(rows.map((row) => row.course).filter(Boolean) as string[])
+      ).sort((a, b) => a.localeCompare(b)),
+    [rows]
+  );
+
+  const admissionYearOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(rows.map((row) => row.admission_year).filter(Boolean) as string[])
+      ).sort((a, b) => b.localeCompare(a)),
+    [rows]
+  );
+
   const filtered = useMemo(() => {
     const query = search.trim().toLocaleLowerCase("uz");
     return rows.filter((row) => {
       if (source && row.researcher_source !== source) return false;
       if (period && row.monitoring_period !== period) return false;
+      if (filters.course && row.course !== filters.course) return false;
+      if (
+        filters.admissionYear &&
+        row.admission_year !== filters.admissionYear
+      ) {
+        return false;
+      }
       if (
         query &&
         ![
@@ -109,7 +147,35 @@ export function MonitoringResultsTable() {
       }
       return true;
     });
-  }, [period, rows, search, source]);
+  }, [filters, period, rows, search, source]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const safePage = Math.min(page, totalPages);
+  const startIndex = (safePage - 1) * pageSize;
+  const paginated = filtered.slice(startIndex, startIndex + pageSize);
+  const firstShown = filtered.length ? startIndex + 1 : 0;
+  const lastShown = Math.min(startIndex + pageSize, filtered.length);
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, source, period, filters, pageSize]);
+
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
+
+  const pageItems = Array.from({ length: totalPages }, (_, index) => index + 1)
+    .filter(
+      (pageNumber) =>
+        pageNumber === 1 ||
+        pageNumber === totalPages ||
+        Math.abs(pageNumber - safePage) <= 2
+    )
+    .reduce<(number | "ellipsis")[]>((items, pageNumber, index, source) => {
+      if (index > 0 && pageNumber - source[index - 1] > 1) items.push("ellipsis");
+      items.push(pageNumber);
+      return items;
+    }, []);
 
   async function remove(row: ResultRow) {
     if (user?.role !== "science_department") return;
@@ -186,8 +252,25 @@ export function MonitoringResultsTable() {
       )}
 
       <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-surface-700 dark:bg-surface-800">
-        <div className="grid grid-cols-1 gap-3 border-b border-slate-200 p-4 md:grid-cols-3 dark:border-surface-700">
-          <div className="relative">
+        <div className="flex flex-wrap items-center gap-3 border-b border-slate-200 p-4 dark:border-surface-700">
+          <label className="flex items-center gap-2 text-sm text-slate-500">
+            <span>Sahifada</span>
+            <select
+              value={pageSize}
+              onChange={(event) =>
+                setPageSize(Number(event.target.value) as 10 | 20 | 50 | 100)
+              }
+              className={selectClass}
+            >
+              {[10, 20, 50, 100].map((size) => (
+                <option key={size} value={size}>
+                  {size}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <div className="relative min-w-[14rem] flex-1 sm:max-w-sm">
             <svg
               className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
               width="17"
@@ -207,6 +290,7 @@ export function MonitoringResultsTable() {
               className="h-10 w-full rounded-lg border border-slate-300 bg-white pl-10 pr-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:border-surface-600 dark:bg-surface-700"
             />
           </div>
+
           <select
             value={source}
             onChange={(event) =>
@@ -214,7 +298,7 @@ export function MonitoringResultsTable() {
                 event.target.value as MonitoringResearcherSource | ""
               )
             }
-            className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:border-surface-600 dark:bg-surface-700"
+            className={selectClass}
           >
             <option value="">Barcha ma&apos;lumot manbalari</option>
             <option value="doktorantlar">Doktorantlar bazasi</option>
@@ -223,7 +307,7 @@ export function MonitoringResultsTable() {
           <select
             value={period}
             onChange={(event) => setPeriod(event.target.value)}
-            className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:border-surface-600 dark:bg-surface-700"
+            className={selectClass}
           >
             <option value="">Barcha monitoring davrlari</option>
             {periods.map((item) => (
@@ -232,7 +316,87 @@ export function MonitoringResultsTable() {
               </option>
             ))}
           </select>
+
+          <button
+            type="button"
+            onClick={() => setFiltersOpen((open) => !open)}
+            className={`inline-flex h-10 w-10 items-center justify-center rounded-lg border transition-colors ${
+              filtersOpen
+                ? "border-blue-500 bg-blue-50 text-blue-700 dark:bg-blue-950/30"
+                : "border-slate-300 text-slate-600 hover:bg-slate-50 dark:border-surface-600 dark:text-surface-300 dark:hover:bg-surface-700"
+            }`}
+            title="Filtrlar"
+            aria-label="Filtrlarni ko'rsatish"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M4 5h16l-6 7v5l-4 2v-7L4 5z" strokeLinejoin="round" />
+            </svg>
+          </button>
         </div>
+
+        {filtersOpen && (
+          <div className="flex flex-wrap items-end gap-3 border-b border-slate-200 bg-slate-50 p-4 dark:border-surface-700 dark:bg-surface-900/40">
+            <label className="min-w-[11rem] flex-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Kurs
+              <select
+                value={pendingFilters.course}
+                onChange={(event) =>
+                  setPendingFilters((current) => ({
+                    ...current,
+                    course: event.target.value,
+                  }))
+                }
+                className={`${selectClass} mt-1 w-full normal-case`}
+              >
+                <option value="">Barchasi</option>
+                {courseOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="min-w-[11rem] flex-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Qabul yili
+              <select
+                value={pendingFilters.admissionYear}
+                onChange={(event) =>
+                  setPendingFilters((current) => ({
+                    ...current,
+                    admissionYear: event.target.value,
+                  }))
+                }
+                className={`${selectClass} mt-1 w-full normal-case`}
+              >
+                <option value="">Barchasi</option>
+                {admissionYearOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <Button
+              size="md"
+              onClick={() => setFilters(pendingFilters)}
+              style={{ background: "#16803c", boxShadow: "none" }}
+            >
+              Filter
+            </Button>
+            <Button
+              variant="outline"
+              size="md"
+              onClick={() => {
+                setPendingFilters(EMPTY_FILTERS);
+                setFilters(EMPTY_FILTERS);
+              }}
+            >
+              Tozalash
+            </Button>
+          </div>
+        )}
 
         {loading ? (
           <div className="p-12 text-center text-slate-500">Yuklanmoqda...</div>
@@ -246,6 +410,7 @@ export function MonitoringResultsTable() {
               <thead className="bg-slate-50 dark:bg-surface-700">
                 <tr className="border-b border-slate-200 dark:border-surface-600">
                   {[
+                    "#",
                     "Izlanuvchi",
                     "Baholovchi",
                     "Kafedra",
@@ -264,11 +429,14 @@ export function MonitoringResultsTable() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-surface-700">
-                {filtered.map((row) => (
+                {paginated.map((row, index) => (
                   <tr
                     key={row.id}
                     className="hover:bg-slate-50 dark:hover:bg-surface-700"
                   >
+                    <td className="px-4 py-3 text-sm text-slate-400">
+                      {startIndex + index + 1}
+                    </td>
                     <td className="max-w-[18rem] px-4 py-3">
                       <p className="font-semibold text-slate-900 dark:text-surface-100">
                         {row.full_name}
@@ -338,6 +506,55 @@ export function MonitoringResultsTable() {
             </table>
           </div>
         )}
+
+        {!loading && filtered.length > 0 && (
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 px-4 py-3 dark:border-surface-700">
+            <p className="text-sm text-slate-500 dark:text-surface-400">
+              Jami {filtered.length} ta yozuvdan {firstShown} dan {lastShown} gacha
+              ko&apos;rsatilyapti
+            </p>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                disabled={safePage === 1}
+                onClick={() => setPage((current) => Math.max(1, current - 1))}
+                className="h-8 rounded-lg px-2 text-sm text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:text-surface-300 dark:hover:bg-surface-700"
+              >
+                ‹
+              </button>
+              {pageItems.map((item, index) =>
+                item === "ellipsis" ? (
+                  <span key={`ellipsis-${index}`} className="px-2 text-slate-400">
+                    ...
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    key={item}
+                    onClick={() => setPage(item)}
+                    className={`h-8 min-w-8 rounded-lg px-2 text-sm font-medium ${
+                      item === safePage
+                        ? "bg-blue-600 text-white"
+                        : "text-slate-600 hover:bg-slate-100 dark:text-surface-300 dark:hover:bg-surface-700"
+                    }`}
+                  >
+                    {item}
+                  </button>
+                )
+              )}
+              <button
+                type="button"
+                disabled={safePage === totalPages}
+                onClick={() =>
+                  setPage((current) => Math.min(totalPages, current + 1))
+                }
+                className="h-8 rounded-lg px-2 text-sm text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:text-surface-300 dark:hover:bg-surface-700"
+              >
+                ›
+              </button>
+            </div>
+          </div>
+        )}
       </section>
 
       <Modal
@@ -379,6 +596,36 @@ export function MonitoringResultsTable() {
                 </p>
                 <p className="mt-1 text-lg font-extrabold text-blue-700">
                   {viewing.total_score} / 100
+                </p>
+              </div>
+              <div>
+                <p className="text-[10px] font-bold uppercase text-slate-400">
+                  Kursi
+                </p>
+                <p className="mt-1 text-sm font-semibold">
+                  {viewing.course ?? "—"}
+                </p>
+              </div>
+              <div>
+                <p className="text-[10px] font-bold uppercase text-slate-400">
+                  Qabul yili
+                </p>
+                <p className="mt-1 text-sm font-semibold">
+                  {viewing.admission_year ?? "—"}
+                </p>
+              </div>
+              <div>
+                <p className="text-[10px] font-bold uppercase text-slate-400">
+                  Topshirgan vaqti
+                </p>
+                <p className="mt-1 text-sm font-semibold">
+                  {viewing.submission_date
+                    ? new Intl.DateTimeFormat("uz-UZ", {
+                        year: "numeric",
+                        month: "2-digit",
+                        day: "2-digit",
+                      }).format(new Date(viewing.submission_date))
+                    : "—"}
                 </p>
               </div>
             </div>

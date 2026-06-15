@@ -264,6 +264,9 @@ export interface MonitoringEvaluation {
   specialty_code: string | null;
   research_topic: string | null;
   advisor_name: string | null;
+  course: string | null;
+  admission_year: string | null;
+  submission_date: string | null;
   monitoring_period: string;
   raw_score: number;
   scored_item_count: number;
@@ -285,6 +288,25 @@ export interface MonitoringEvaluationItem {
   score: number | null;
   comment: string | null;
   disabled: boolean;
+  created_at: string;
+}
+
+export type MonitoringEvaluationLogField = "score" | "comment";
+export type MonitoringEvaluationDeviceKind = "kompyuter" | "mobil";
+
+export interface MonitoringEvaluationLog {
+  id: string;
+  evaluation_id: string;
+  university_id: string;
+  changed_by: string;
+  changed_by_name: string;
+  device_kind: MonitoringEvaluationDeviceKind;
+  ip_address: string | null;
+  criterion_key: string;
+  indicator_label: string;
+  field: MonitoringEvaluationLogField;
+  old_value: string | null;
+  new_value: string | null;
   created_at: string;
 }
 

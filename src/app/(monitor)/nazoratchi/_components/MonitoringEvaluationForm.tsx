@@ -8,10 +8,17 @@ import { Modal } from "@/components/ui/Modal";
 import { useSupabaseAuth } from "@/contexts/SupabaseAuthContext";
 import { createClient } from "@/lib/supabase/client";
 import { MONITORING_RUBRIC } from "@/lib/monitoring-rubric";
+import { invalidateIzlanuvchilarCache } from "@/app/(shared)/izlanuvchilar/_lib/cache";
+import {
+  logEvaluationChanges,
+  type EvaluationChangeInput,
+} from "../_actions/log-evaluation-changes";
 import type {
   Department,
   IzlanuvchiTuri,
+  MonitoringEvaluationDeviceKind,
   MonitoringEvaluationItem,
+  MonitoringEvaluationLog,
   MonitoringResearcherSource,
 } from "@/types/db";
 
@@ -26,6 +33,9 @@ type SearchResult = {
   specialtyCode: string;
   researchTopic: string;
   advisor: string;
+  course: string;
+  admissionYear: string;
+  submissionDate: string;
 };
 
 type EvaluationForm = {
@@ -35,6 +45,9 @@ type EvaluationForm = {
   specialtyCode: string;
   researchTopic: string;
   advisor: string;
+  course: string;
+  admissionYear: string;
+  submissionDate: string;
   period: string;
 };
 
@@ -49,12 +62,37 @@ const EMPTY_FORM: EvaluationForm = {
   specialtyCode: "",
   researchTopic: "",
   advisor: "",
+  course: "",
+  admissionYear: "",
+  submissionDate: "",
   period: currentMonitoringPeriod(),
 };
 
 function relationOne<T>(value: T | T[] | null | undefined): T | null {
   if (Array.isArray(value)) return value[0] ?? null;
   return value ?? null;
+}
+
+function detectDeviceKind(): MonitoringEvaluationDeviceKind {
+  if (typeof navigator === "undefined") return "kompyuter";
+  const uaData = (navigator as Navigator & { userAgentData?: { mobile?: boolean } })
+    .userAgentData;
+  if (uaData?.mobile !== undefined) {
+    return uaData.mobile ? "mobil" : "kompyuter";
+  }
+  return /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)
+    ? "mobil"
+    : "kompyuter";
+}
+
+function formatLogTimestamp(value: string) {
+  return new Intl.DateTimeFormat("uz-UZ", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(value));
 }
 
 function fieldClassName(readOnly = false) {
@@ -71,12 +109,14 @@ function Field({
   onChange,
   placeholder,
   readOnly = false,
+  type = "text",
 }: {
   label: string;
   value: string;
   onChange?: (value: string) => void;
   placeholder?: string;
   readOnly?: boolean;
+  type?: string;
 }) {
   return (
     <label className="flex flex-col gap-1.5">
@@ -84,6 +124,7 @@ function Field({
         {label}
       </span>
       <input
+        type={type}
         value={value}
         readOnly={readOnly}
         placeholder={placeholder}
@@ -126,6 +167,10 @@ export function MonitoringEvaluationForm({
     id: string;
     total: number;
   } | null>(null);
+  const initialScoresRef = useRef<Record<string, number>>({});
+  const initialCommentsRef = useRef<Record<string, string>>({});
+  const [logs, setLogs] = useState<MonitoringEvaluationLog[]>([]);
+  const [logsLoading, setLogsLoading] = useState(false);
 
   useEffect(() => {
     if (!user?.university_id) return;
@@ -202,6 +247,9 @@ export function MonitoringEvaluationForm({
         specialtyCode: data.specialty_code ?? "",
         researchTopic: data.research_topic ?? "",
         advisor: data.advisor_name ?? "",
+        course: data.course ?? "",
+        admissionYear: data.admission_year ?? "",
+        submissionDate: data.submission_date ?? "",
       });
       setSearchQuery(data.full_name);
       setForm({
@@ -211,6 +259,9 @@ export function MonitoringEvaluationForm({
         specialtyCode: data.specialty_code ?? "",
         researchTopic: data.research_topic ?? "",
         advisor: data.advisor_name ?? "",
+        course: data.course ?? "",
+        admissionYear: data.admission_year ?? "",
+        submissionDate: data.submission_date ?? "",
         period: data.monitoring_period,
       });
 
@@ -226,6 +277,8 @@ export function MonitoringEvaluationForm({
       });
       setScores(nextScores);
       setComments(nextComments);
+      initialScoresRef.current = nextScores;
+      initialCommentsRef.current = nextComments;
       setEditLoading(false);
     }
 
@@ -235,8 +288,29 @@ export function MonitoringEvaluationForm({
     };
   }, [evaluationId, supabase, user?.id, user?.university_id]);
 
+  async function loadLogs() {
+    if (!evaluationId) return;
+    setLogsLoading(true);
+    const { data } = await supabase
+      .from("monitoring_evaluation_logs")
+      .select("*")
+      .eq("evaluation_id", evaluationId)
+      .order("created_at", { ascending: false });
+    setLogs((data as MonitoringEvaluationLog[] | null) ?? []);
+    setLogsLoading(false);
+  }
+
   useEffect(() => {
-    if (evaluationId) {
+    if (!evaluationId) {
+      setLogs([]);
+      return;
+    }
+    loadLogs();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [evaluationId]);
+
+  useEffect(() => {
+    if (evaluationId || selected) {
       setSearchResults([]);
       setSearching(false);
       return;
@@ -270,7 +344,7 @@ export function MonitoringEvaluationForm({
       let request = supabase
         .from("izlanuvchilar")
         .select(
-          "id,full_name,pinfl,source_no,department_id,education_stage,specialty_code,research_topic,supervisor_name,departments(name)"
+          "id,full_name,pinfl,source_no,department_id,education_stage,specialty_code,research_topic,supervisor_name,admission_year,submission_date,course,departments(name)"
         )
         .eq("university_id", user.university_id)
         .eq("turi", researcherTuri);
@@ -308,6 +382,9 @@ export function MonitoringEvaluationForm({
               specialtyCode: row.specialty_code ?? "",
               researchTopic: row.research_topic ?? "",
               advisor: row.supervisor_name ?? "",
+              course: row.course ?? "",
+              admissionYear: row.admission_year ?? "",
+              submissionDate: row.submission_date ?? "",
             };
           })
         );
@@ -322,6 +399,7 @@ export function MonitoringEvaluationForm({
     };
   }, [
     evaluationId,
+    selected,
     searchQuery,
     researcherTuri,
     supabase,
@@ -399,6 +477,9 @@ export function MonitoringEvaluationForm({
       specialtyCode: result.specialtyCode,
       researchTopic: result.researchTopic,
       advisor: result.advisor,
+      course: result.course,
+      admissionYear: result.admissionYear,
+      submissionDate: result.submissionDate,
       period: currentMonitoringPeriod(),
     });
     setSearchQuery(result.fullName);
@@ -499,20 +580,27 @@ export function MonitoringEvaluationForm({
 
     setSaving(true);
 
-    if (
-      selected.source === "izlanuvchilar" &&
-      selected.departmentId !== form.departmentId
-    ) {
-      const { error: departmentError } = await supabase
+    if (selected.source === "izlanuvchilar") {
+      const { error: writeBackError } = await supabase
         .from("izlanuvchilar")
-        .update({ department_id: form.departmentId })
+        .update({
+          full_name: form.fullName.trim(),
+          department_id: form.departmentId || null,
+          specialty_code: form.specialtyCode.trim() || null,
+          research_topic: form.researchTopic.trim() || null,
+          supervisor_name: form.advisor.trim() || null,
+          admission_year: form.admissionYear.trim() || null,
+          submission_date: form.submissionDate || null,
+          course: form.course.trim() || null,
+        })
         .eq("id", selected.id);
 
-      if (departmentError) {
+      if (writeBackError) {
         setSaving(false);
-        setError(departmentError.message);
+        setError(writeBackError.message);
         return;
       }
+      invalidateIzlanuvchilarCache();
     }
 
     const evaluationValues = {
@@ -522,6 +610,9 @@ export function MonitoringEvaluationForm({
       specialty_code: form.specialtyCode.trim() || null,
       research_topic: form.researchTopic.trim() || null,
       advisor_name: form.advisor.trim() || null,
+      course: form.course.trim() || null,
+      admission_year: form.admissionYear.trim() || null,
+      submission_date: form.submissionDate || null,
       monitoring_period: form.period.trim(),
       raw_score: stats.sum,
       scored_item_count: stats.count,
@@ -588,6 +679,51 @@ export function MonitoringEvaluationForm({
       setSaving(false);
       setError(itemsError.message);
       return;
+    }
+
+    if (evaluationId) {
+      const changes: EvaluationChangeInput[] = [];
+      for (const item of items) {
+        const oldScore = initialScoresRef.current[item.criterion_key] ?? null;
+        const newScore = item.score;
+        if (oldScore !== newScore) {
+          changes.push({
+            criterion_key: item.criterion_key,
+            indicator_label: item.indicator_label,
+            field: "score",
+            old_value: oldScore === null ? null : String(oldScore),
+            new_value: newScore === null ? null : String(newScore),
+          });
+        }
+
+        const oldComment = initialCommentsRef.current[item.criterion_key] ?? null;
+        const newComment = item.comment;
+        if ((oldComment ?? "") !== (newComment ?? "")) {
+          changes.push({
+            criterion_key: item.criterion_key,
+            indicator_label: item.indicator_label,
+            field: "comment",
+            old_value: oldComment,
+            new_value: newComment,
+          });
+        }
+      }
+
+      const nextScores: Record<string, number> = {};
+      const nextComments: Record<string, string> = {};
+      items.forEach((item) => {
+        if (!item.disabled && item.score !== null) {
+          nextScores[item.criterion_key] = item.score;
+        }
+        if (item.comment) nextComments[item.criterion_key] = item.comment;
+      });
+      initialScoresRef.current = nextScores;
+      initialCommentsRef.current = nextComments;
+
+      if (changes.length > 0) {
+        await logEvaluationChanges(evaluation.id, detectDeviceKind(), changes);
+        await loadLogs();
+      }
     }
 
     setSaving(false);
@@ -756,7 +892,13 @@ export function MonitoringEvaluationForm({
       )}
 
       <section className="mb-8 grid grid-cols-1 gap-5 rounded-xl border border-slate-200 bg-slate-50 p-5 md:grid-cols-2 dark:border-surface-700 dark:bg-surface-800">
-        <Field label="F.I.Sh." value={form.fullName} readOnly />
+        <Field
+          label="F.I.Sh."
+          value={form.fullName}
+          onChange={(value) =>
+            setForm((current) => ({ ...current, fullName: value }))
+          }
+        />
         <label className="flex flex-col gap-1.5">
           <span className="text-sm font-semibold text-slate-700 dark:text-surface-200">
             Biriktirilgan kafedra nomi
@@ -783,13 +925,7 @@ export function MonitoringEvaluationForm({
           <span className="text-sm font-semibold text-slate-700 dark:text-surface-200">
             Ta&apos;lim shakli
           </span>
-          <select
-            value={form.level}
-            onChange={(event) =>
-              setForm((current) => ({ ...current, level: event.target.value }))
-            }
-            className={fieldClassName()}
-          >
+          <select value={form.level} disabled className={fieldClassName(true)}>
             <option value="PhD">PhD (Falsafa doktori)</option>
             <option value="DSc">DSc (Fan doktori)</option>
           </select>
@@ -801,6 +937,30 @@ export function MonitoringEvaluationForm({
             setForm((current) => ({ ...current, specialtyCode: value }))
           }
           placeholder="10.00.06"
+        />
+        <Field
+          label="Qabul yili"
+          value={form.admissionYear}
+          onChange={(value) =>
+            setForm((current) => ({ ...current, admissionYear: value }))
+          }
+          placeholder="2023"
+        />
+        <Field
+          label="Topshirgan vaqti"
+          type="date"
+          value={form.submissionDate}
+          onChange={(value) =>
+            setForm((current) => ({ ...current, submissionDate: value }))
+          }
+        />
+        <Field
+          label="Kursi"
+          value={form.course}
+          onChange={(value) =>
+            setForm((current) => ({ ...current, course: value }))
+          }
+          placeholder="1-kurs"
         />
         <div className="md:col-span-2">
           <Field
@@ -970,6 +1130,93 @@ export function MonitoringEvaluationForm({
           </tfoot>
         </table>
       </section>
+
+      {evaluationId && !editLoading && (
+        <section className="mb-8 rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-surface-700 dark:bg-surface-800">
+          <h2 className="mb-4 flex items-center gap-2 text-base font-bold text-slate-800 dark:text-surface-100">
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              className="text-slate-400"
+            >
+              <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+              <path d="M3 3v5h5" />
+              <path d="M12 7v5l4 2" />
+            </svg>
+            O&apos;zgarishlar tarixi
+            {!logsLoading && (
+              <span className="ml-auto text-xs font-normal text-slate-400">
+                {logs.length} ta o&apos;zgarish
+              </span>
+            )}
+          </h2>
+
+          {logsLoading ? (
+            <p className="text-sm text-slate-500">Yuklanmoqda...</p>
+          ) : logs.length === 0 ? (
+            <p className="text-sm text-slate-500">
+              Hali o&apos;zgarishlar yo&apos;q.
+            </p>
+          ) : (
+            <ul className="space-y-3">
+              {logs.map((log) => (
+                <li
+                  key={log.id}
+                  className="border-t border-slate-100 pt-3 first:border-t-0 first:pt-0 dark:border-surface-700"
+                >
+                  <p className="text-sm">
+                    <span className="font-semibold text-slate-800 dark:text-surface-100">
+                      {log.indicator_label}
+                    </span>
+                    :{" "}
+                    {log.field === "score" ? (
+                      <>
+                        <span className="text-slate-500 dark:text-surface-400">
+                          ball
+                        </span>{" "}
+                        <span className="font-bold text-red-700 dark:text-red-400">
+                          {log.old_value ?? "—"}
+                        </span>
+                        <span className="mx-1 text-slate-400">→</span>
+                        <span className="font-bold text-green-700 dark:text-green-400">
+                          {log.new_value ?? "—"}
+                        </span>
+                      </>
+                    ) : (
+                      <span className="text-slate-500 dark:text-surface-400">
+                        izoh o&apos;zgartirildi
+                      </span>
+                    )}
+                  </p>
+                  {log.field === "comment" && (
+                    <p className="mt-1 rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-600 dark:bg-surface-700 dark:text-surface-300">
+                      <span className="text-slate-400 line-through">
+                        {log.old_value || "—"}
+                      </span>
+                      <span className="mx-1 text-slate-400">→</span>
+                      {log.new_value || "—"}
+                    </p>
+                  )}
+                  <div className="mt-1 flex flex-wrap gap-3 text-xs text-slate-400">
+                    <span>{log.changed_by_name}</span>
+                    <span>{formatLogTimestamp(log.created_at)}</span>
+                    <span>
+                      {log.device_kind === "mobil"
+                        ? "Mobil qurilma"
+                        : "Kompyuter"}
+                    </span>
+                    {log.ip_address && <span>IP {log.ip_address}</span>}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
 
       <div className="flex justify-end border-t border-slate-200 pt-6 dark:border-surface-700">
         <Button
