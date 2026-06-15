@@ -20,6 +20,10 @@
 alter table public.submissions
   drop constraint if exists submissions_department_id_year_quarter_key;
 
+-- Idempotent: drop first so re-running this migration never fails with 42P07.
+alter table public.submissions
+  drop constraint if exists submissions_submitted_by_year_quarter_key;
+
 alter table public.submissions
   add constraint submissions_submitted_by_year_quarter_key
   unique (submitted_by, year, quarter);
