@@ -51,6 +51,7 @@ export default function SubmissionDetailPage() {
   const [overallComment, setOverallComment] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [downloadingFor, setDownloadingFor] = useState<string | null>(null);
+  const [openingFileFor, setOpeningFileFor] = useState<string | null>(null);
 
   // Router is unused but kept for parity with prior file; silence lint.
   void router;
@@ -175,6 +176,19 @@ export default function SubmissionDetailPage() {
     } finally {
       setDownloadingFor(null);
     }
+  };
+
+  const openFileInNewTab = async (path: string, indicatorId: string) => {
+    setOpeningFileFor(indicatorId);
+    const { data, error: e } = await supabase.storage
+      .from("submissions")
+      .createSignedUrl(path, 60 * 10); // 10 minutes
+    setOpeningFileFor(null);
+    if (e || !data) {
+      setError(e?.message ?? "Faylni ochib bo'lmadi.");
+      return;
+    }
+    window.open(data.signedUrl, "_blank");
   };
 
   const finalize = async () => {
@@ -421,21 +435,37 @@ export default function SubmissionDetailPage() {
                   <td className="px-4 py-3">
                     <div className="space-y-1">
                       {(cell?.files ?? []).length === 0 ? (
-                        <span className="text-xs text-surface-400">—</span>
+                        <span className="text-xs text-surface-400">—</span>
                       ) : (
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs text-surface-500">
-                            {cell!.files.length} ta fayl
-                          </span>
+                        <>
+                          {cell!.files.map((filePath) => (
+                            <div key={filePath} className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => openFileInNewTab(filePath, ind.id)}
+                                disabled={openingFileFor === ind.id}
+                                title={filePath.split("/").pop()?.replace(/^\d+_/, "")}
+                                className="flex items-center gap-1 text-xs text-primary-600 dark:text-primary-400 hover:underline disabled:opacity-60 disabled:cursor-wait text-left break-all"
+                              >
+                                <svg className="w-3 h-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                </svg>
+                                {filePath.split("/").pop()?.replace(/^\d+_/, "") ?? "fayl"}
+                              </button>
+                            </div>
+                          ))}
                           <button
                             type="button"
                             onClick={() => downloadIndicatorFiles(ind.id)}
                             disabled={downloadingFor === ind.id}
-                            className="inline-flex items-center rounded-md bg-primary-600 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-60"
+                            className="mt-1 inline-flex items-center gap-1 rounded-md border border-primary-300 dark:border-primary-700 px-2 py-1 text-xs font-medium text-primary-700 dark:text-primary-300 hover:bg-primary-50 dark:hover:bg-primary-900/30 disabled:cursor-not-allowed disabled:opacity-60"
                           >
-                            {downloadingFor === ind.id ? "Tayyorlanmoqda..." : "Yuklab olish"}
+                            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                            </svg>
+                            {downloadingFor === ind.id ? "Tayyorlanmoqda..." : "Barchasini yuklab olish"}
                           </button>
-                        </div>
+                        </>
                       )}
                     </div>
                   </td>

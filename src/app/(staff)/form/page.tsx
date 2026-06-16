@@ -290,6 +290,20 @@ export default function FormPage() {
     setMessage("");
     if (debounceRef.current) clearTimeout(debounceRef.current);
     blockAutoSaveRef.current = true;
+
+    // Validate: if files are uploaded for an indicator, a numeric value is required.
+    for (const ind of indicators) {
+      const editable = indicatorEditable(ind.id) || status === "draft" || !submission;
+      if (!editable) continue;
+      const hasFiles = (filesRef.current[ind.id] ?? []).length > 0;
+      const hasValue = (valuesRef.current[ind.id] ?? "").trim() !== "";
+      if (hasFiles && !hasValue) {
+        setError(`"${ind.no}. ${ind.name}" — fayl yuklangan, ammo raqam kiritilmagan. Iltimos, raqam kiriting.`);
+        blockAutoSaveRef.current = false;
+        return;
+      }
+    }
+
     const payload = buildPayload(newStatus);
     if (!payload) { blockAutoSaveRef.current = false; return; }
     setBusyAction("submit");
@@ -552,23 +566,37 @@ export default function FormPage() {
                       {maqsad !== null ? maqsad : <span className="text-surface-400">—</span>}
                     </td>
                     <td className="px-4 py-3">
-                      <input
-                        type="number"
-                        step="any"
-                        value={values[ind.id] ?? ""}
-                        onChange={(e) => {
-                          const next = e.target.value;
-                          valuesRef.current = { ...valuesRef.current, [ind.id]: next };
-                          setValues((p) => ({ ...p, [ind.id]: next }));
-                          scheduleAutoSave();
-                        }}
-                        onBlur={() => {
-                          if (debounceRef.current) clearTimeout(debounceRef.current);
-                          void autoPersistRef.current();
-                        }}
-                        disabled={!editable}
-                        className="w-full rounded-md border border-surface-300 dark:border-surface-600 bg-white dark:bg-surface-800 px-2 py-1.5 text-sm disabled:opacity-60"
-                      />
+                      <div className="relative">
+                        <input
+                          type="number"
+                          step="any"
+                          value={values[ind.id] ?? ""}
+                          onChange={(e) => {
+                            const next = e.target.value;
+                            valuesRef.current = { ...valuesRef.current, [ind.id]: next };
+                            setValues((p) => ({ ...p, [ind.id]: next }));
+                            scheduleAutoSave();
+                          }}
+                          onBlur={() => {
+                            if (debounceRef.current) clearTimeout(debounceRef.current);
+                            void autoPersistRef.current();
+                          }}
+                          disabled={!editable}
+                          className={`w-full rounded-md border px-2 py-1.5 text-sm disabled:opacity-60 ${
+                            (f.length > 0 && !(values[ind.id] ?? "").trim())
+                              ? "border-amber-400 dark:border-amber-500 bg-amber-50 dark:bg-amber-900/20"
+                              : "border-surface-300 dark:border-surface-600 bg-white dark:bg-surface-800"
+                          }`}
+                        />
+                        {editable && f.length > 0 && !(values[ind.id] ?? "").trim() && (
+                          <span
+                            title="Fayl yuklangan — raqam kiriting"
+                            className="absolute right-1.5 top-1/2 -translate-y-1/2 text-amber-500 text-xs leading-none pointer-events-none"
+                          >
+                            ⚠
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-4 py-3 text-sm font-medium text-surface-900 dark:text-surface-100">
                       {foiz}
