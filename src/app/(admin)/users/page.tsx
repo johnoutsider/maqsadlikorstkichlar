@@ -44,6 +44,9 @@ const ALL_ASSIGNABLE_ROLES: RoleName[] = [
   "monitor",
 ];
 
+type SortKey = "display_name" | "email" | "primary_role" | "assigned";
+type SortDir = "asc" | "desc";
+
 export default function UsersPage() {
   const supabase = createClient();
   const { user } = useSupabaseAuth();
@@ -52,6 +55,10 @@ export default function UsersPage() {
   const [departments, setDepartments] = useState<Department[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  const [filterFacultyId, setFilterFacultyId] = useState("");
+  const [sortKey, setSortKey] = useState<SortKey>("display_name");
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<Row | null>(null);
@@ -145,6 +152,34 @@ export default function UsersPage() {
     },
     [depById, facById]
   );
+
+  const toggleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir("asc");
+    }
+  };
+
+  const filteredAndSorted = useMemo(() => {
+    let result = rows;
+
+    if (filterFacultyId) {
+      result = result.filter((r) => r.faculty_id === filterFacultyId);
+    }
+
+    return [...result].sort((a, b) => {
+      let va = "";
+      let vb = "";
+      if (sortKey === "display_name") { va = a.display_name; vb = b.display_name; }
+      else if (sortKey === "email") { va = a.email; vb = b.email; }
+      else if (sortKey === "primary_role") { va = ROLE_LABEL[a.primary_role] ?? a.primary_role; vb = ROLE_LABEL[b.primary_role] ?? b.primary_role; }
+      else if (sortKey === "assigned") { va = assignedName(a); vb = assignedName(b); }
+      const cmp = va.localeCompare(vb, "uz", { sensitivity: "base" });
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+  }, [rows, filterFacultyId, sortKey, sortDir, assignedName]);
 
   const openCreate = () => {
     setEditingUser(null);
@@ -375,25 +410,74 @@ export default function UsersPage() {
         </div>
       )}
 
+      {!loading && faculties.length > 0 && (
+        <div className="mb-4 flex items-center gap-3">
+          <label className="text-sm font-medium text-surface-700 dark:text-surface-300 whitespace-nowrap">
+            Fakultet bo&apos;yicha:
+          </label>
+          <select
+            value={filterFacultyId}
+            onChange={(e) => setFilterFacultyId(e.target.value)}
+            className="rounded-md border border-surface-300 bg-white px-3 py-1.5 text-sm dark:border-surface-600 dark:bg-surface-800 dark:text-surface-100"
+          >
+            <option value="">Barchasi</option>
+            {faculties.map((f) => (
+              <option key={f.id} value={f.id}>
+                {f.short_code} — {f.name}
+              </option>
+            ))}
+          </select>
+          {filterFacultyId && (
+            <button
+              onClick={() => setFilterFacultyId("")}
+              className="text-sm text-surface-500 hover:text-surface-700 dark:hover:text-surface-300"
+            >
+              ✕ Tozalash
+            </button>
+          )}
+        </div>
+      )}
+
       <div className="overflow-hidden rounded-lg border border-surface-200 bg-white dark:border-surface-700 dark:bg-surface-800">
         {loading ? (
           <div className="p-8 text-center text-surface-500">Yuklanmoqda...</div>
-        ) : rows.length === 0 ? (
-          <div className="p-8 text-center text-surface-500">Hali foydalanuvchi qo&apos;shilmagan.</div>
+        ) : filteredAndSorted.length === 0 ? (
+          <div className="p-8 text-center text-surface-500">
+            {rows.length === 0 ? "Hali foydalanuvchi qoʻshilmagan." : "Tanlangan mezon boʻyicha natija topilmadi."}
+          </div>
         ) : (
           <table className="w-full">
             <thead className="border-b border-surface-200 bg-surface-50 dark:border-surface-700 dark:bg-surface-900/50">
               <tr>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-surface-600">Ism</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-surface-600">Email</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-surface-600">Rol</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-surface-600">Biriktirilgan</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-surface-600 w-10">#</th>
+                {(
+                  [
+                    { key: "display_name" as SortKey, label: "Ism" },
+                    { key: "email" as SortKey, label: "Email" },
+                    { key: "primary_role" as SortKey, label: "Rol" },
+                    { key: "assigned" as SortKey, label: "Biriktirilgan" },
+                  ] as { key: SortKey; label: string }[]
+                ).map(({ key, label }) => (
+                  <th
+                    key={key}
+                    onClick={() => toggleSort(key)}
+                    className="px-4 py-3 text-left text-xs font-semibold uppercase text-surface-600 cursor-pointer select-none hover:text-surface-900 dark:hover:text-surface-100"
+                  >
+                    <span className="inline-flex items-center gap-1">
+                      {label}
+                      <span className="text-surface-400">
+                        {sortKey === key ? (sortDir === "asc" ? "↑" : "↓") : "↕"}
+                      </span>
+                    </span>
+                  </th>
+                ))}
                 <th className="px-4 py-3" />
               </tr>
             </thead>
             <tbody className="divide-y divide-surface-200 dark:divide-surface-700">
-              {rows.map((r) => (
+              {filteredAndSorted.map((r, i) => (
                 <tr key={r.id} className="hover:bg-surface-50 dark:hover:bg-surface-900/30">
+                  <td className="px-4 py-3 text-sm text-surface-400 tabular-nums">{i + 1}</td>
                   <td className="px-4 py-3 text-sm">{r.display_name}</td>
                   <td className="px-4 py-3 font-mono text-sm text-surface-700 dark:text-surface-300">{r.email}</td>
                   <td className="px-4 py-3 text-sm">

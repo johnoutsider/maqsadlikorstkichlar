@@ -43,6 +43,7 @@ export default function SubmissionsListPage() {
   const [filterYear, setFilterYear] = useState<number>(new Date().getFullYear());
   const [filterQuarter, setFilterQuarter] = useState<Quarter | "">("");
   const [filterFaculty, setFilterFaculty] = useState("");
+  const [filterDepartment, setFilterDepartment] = useState("");
 
   useEffect(() => {
     if (!user?.university_id) return;
@@ -72,6 +73,7 @@ export default function SubmissionsListPage() {
     if (filterYear) q = q.eq("year", filterYear);
     if (filterQuarter) q = q.eq("quarter", filterQuarter);
     if (filterFaculty) q = q.eq("faculty_id", filterFaculty);
+    if (filterDepartment) q = q.eq("department_id", filterDepartment);
     const { data, error: e } = await q;
 
     if (e) {
@@ -103,6 +105,7 @@ export default function SubmissionsListPage() {
         if (filterYear) tq = tq.eq("year", filterYear);
         if (filterQuarter) tq = tq.eq("quarter", filterQuarter);
         if (filterFaculty) tq = tq.eq("faculty_id", filterFaculty);
+        if (filterDepartment) tq = tq.eq("department_id", filterDepartment);
         const tr = await tq;
         setTargets((tr.data as import("@/types/db").Target[]) ?? []);
       } else {
@@ -110,12 +113,17 @@ export default function SubmissionsListPage() {
       }
     }
     setLoading(false);
-  }, [supabase, user?.university_id, user?.role, filterStatus, filterYear, filterQuarter, filterFaculty]);
+  }, [supabase, user?.university_id, user?.role, filterStatus, filterYear, filterQuarter, filterFaculty, filterDepartment]);
 
   useEffect(() => { load(); }, [load]);
 
   const facById = useMemo(() => new Map(faculties.map((x) => [x.id, x])), [faculties]);
   const depById = useMemo(() => new Map(departments.map((x) => [x.id, x])), [departments]);
+  // Kafedra options follow the chosen faculty; with no faculty selected, show all.
+  const departmentOptions = useMemo(
+    () => (filterFaculty ? departments.filter((d) => d.faculty_id === filterFaculty) : departments),
+    [departments, filterFaculty]
+  );
 
   return (
     <div>
@@ -127,7 +135,7 @@ export default function SubmissionsListPage() {
       </div>
 
       <div className="bg-white dark:bg-surface-800 rounded-lg border border-surface-200 dark:border-surface-700 p-4 mb-4">
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
           <div>
             <label className="block text-xs font-medium text-surface-600 dark:text-surface-400 mb-1">Holat</label>
             <select
@@ -163,11 +171,22 @@ export default function SubmissionsListPage() {
             <label className="block text-xs font-medium text-surface-600 dark:text-surface-400 mb-1">Fakultet</label>
             <select
               value={filterFaculty}
-              onChange={(e) => setFilterFaculty(e.target.value)}
+              onChange={(e) => { setFilterFaculty(e.target.value); setFilterDepartment(""); }}
               className="w-full rounded-md border border-surface-300 dark:border-surface-600 bg-white dark:bg-surface-800 px-3 py-2 text-sm"
             >
               <option value="">Barchasi</option>
               {faculties.map((f) => <option key={f.id} value={f.id}>{f.short_code}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-surface-600 dark:text-surface-400 mb-1">Kafedra</label>
+            <select
+              value={filterDepartment}
+              onChange={(e) => setFilterDepartment(e.target.value)}
+              className="w-full rounded-md border border-surface-300 dark:border-surface-600 bg-white dark:bg-surface-800 px-3 py-2 text-sm"
+            >
+              <option value="">Barchasi</option>
+              {departmentOptions.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
             </select>
           </div>
         </div>

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { normalizePhone } from "@/lib/telegram";
+import { realignUserSubmissions } from "@/lib/realign-submissions";
 import type { RoleName } from "@/types/db";
 
 interface CreateUserBody {
@@ -260,7 +261,7 @@ export async function PATCH(req: Request) {
 
   const { data: target } = await admin
     .from("users")
-    .select("university_id")
+    .select("university_id, department_id, faculty_id")
     .eq("id", id)
     .maybeSingle();
   if (!target) return bad("Target user not found", 404);
@@ -330,7 +331,38 @@ export async function PATCH(req: Request) {
   );
   if (grantErr) return bad(grantErr.message, 400);
 
-  return NextResponse.json({ user: profile });
+  // If this user's department/faculty changed, re-point their existing
+  // submissions and move the stored files to the new department folder so the
+  // reports don't stay stranded under the old kafedra. Best-effort: a failure
+  // here must not fail the user update (the row is already saved); we surface
+  // it as a warning the admin can see.
+  let realign: { rows: number; movedFiles: number; skippedFiles: number } | undefined;
+  if (
+    department_id &&
+    (target.department_id !== department_id || target.faculty_id !== faculty_id)
+  ) {
+    try {
+      const results = await realignUserSubmissions(admin, {
+        userId: id,
+        newDepartmentId: department_id,
+        newFacultyId: faculty_id,
+      });
+      realign = {
+        rows: results.length,
+        movedFiles: results.reduce((n, r) => n + r.movedFiles, 0),
+        skippedFiles: results.reduce((n, r) => n + r.skippedFiles.length, 0),
+      };
+    } catch (e) {
+      return NextResponse.json({
+        user: profile,
+        warning: `Foydalanuvchi saqlandi, lekin hisobotlarni yangi kafedraga ko'chirishda xatolik: ${
+          e instanceof Error ? e.message : String(e)
+        }`,
+      });
+    }
+  }
+
+  return NextResponse.json({ user: profile, realign });
 }
 
 export async function DELETE(req: Request) {

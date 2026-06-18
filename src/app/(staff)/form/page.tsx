@@ -11,6 +11,8 @@ import type {
   Quarter,
   IndicatorSubmission,
   AppUser,
+  Faculty,
+  Department,
 } from "@/types/db";
 import {
   STATUS_LABEL,
@@ -51,6 +53,8 @@ export default function FormPage() {
 
   const { user } = useSupabaseAuth();
 
+  const [faculty, setFaculty] = useState<Faculty | null>(null);
+  const [department, setDepartment] = useState<Department | null>(null);
   const [year, setYear] = useState<number>(new Date().getFullYear());
   const [quarter, setQuarter] = useState<Quarter>(currentQuarter());
   const [periodInit, setPeriodInit] = useState(false);
@@ -62,7 +66,7 @@ export default function FormPage() {
   const [values, setValues] = useState<Record<string, string>>({});
   const [files, setFiles] = useState<Record<string, string[]>>({});
   const [loading, setLoading] = useState(true);
-  const [busyAction, setBusyAction] = useState<"submit" | null>(null);
+  const [busyAction, setBusyAction] = useState<"submit" | "save" | null>(null);
   const [uploadingFor, setUploadingFor] = useState<string | null>(null);
   const [uploadErrors, setUploadErrors] = useState<Record<string, string>>({});
   const [error, setError] = useState("");
@@ -101,6 +105,20 @@ export default function FormPage() {
       setIndicators(list);
     })();
   }, [user?.university_id, supabase]);
+
+  useEffect(() => {
+    if (!user?.faculty_id) return;
+    (async () => {
+      const [fRes, dRes] = await Promise.all([
+        supabase.from("faculties").select("*").eq("id", user.faculty_id!).maybeSingle(),
+        user.department_id
+          ? supabase.from("departments").select("*").eq("id", user.department_id).maybeSingle()
+          : Promise.resolve({ data: null }),
+      ]);
+      setFaculty((fRes.data as Faculty) ?? null);
+      setDepartment((dRes.data as Department) ?? null);
+    })();
+  }, [user?.faculty_id, user?.department_id, supabase]);
 
   // On first load, if the staff has a submission needing attention
   // (needs_revision > rejected > any most recent), jump to that period
@@ -337,6 +355,22 @@ export default function FormPage() {
     load();
   };
 
+  const saveDraft = async () => {
+    if (!user?.id) return;
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    setBusyAction("save");
+    const targetStatus: SubmissionStatus = isRevision ? status : "draft";
+    const payload = buildPayload(targetStatus, { lenient: true });
+    if (!payload) { setBusyAction(null); return; }
+    const { error: e } = await supabase
+      .from("submissions")
+      .upsert(payload, { onConflict: "submitted_by,year,quarter" });
+    setBusyAction(null);
+    if (e) { setError(e.message); return; }
+    setMessage("Qoralama saqlandi.");
+    load();
+  };
+
   // ── Auto-save ────────────────────────────────────────────────────────────
   // Persist the current form silently, keeping the current status (a brand-new
   // form becomes a draft; a returned report stays needs_revision/rejected so
@@ -456,7 +490,35 @@ export default function FormPage() {
       </div>
 
       <div className="bg-white dark:bg-surface-800 rounded-lg border border-surface-200 dark:border-surface-700 p-4 mb-4">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+          <div>
+            <label className="block text-xs font-medium text-surface-600 dark:text-surface-400 mb-1">Fakultet</label>
+            <select
+              disabled
+              value={faculty?.id ?? ""}
+              className="w-full rounded-md border border-surface-300 dark:border-surface-600 bg-surface-50 dark:bg-surface-900 px-3 py-2 text-sm opacity-75 cursor-not-allowed"
+            >
+              {faculty ? (
+                <option value={faculty.id}>{faculty.short_code} — {faculty.name}</option>
+              ) : (
+                <option value="">—</option>
+              )}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-surface-600 dark:text-surface-400 mb-1">Kafedra</label>
+            <select
+              disabled
+              value={department?.id ?? ""}
+              className="w-full rounded-md border border-surface-300 dark:border-surface-600 bg-surface-50 dark:bg-surface-900 px-3 py-2 text-sm opacity-75 cursor-not-allowed"
+            >
+              {department ? (
+                <option value={department.id}>{department.short_code} — {department.name}</option>
+              ) : (
+                <option value="">—</option>
+              )}
+            </select>
+          </div>
           <div>
             <label className="block text-xs font-medium text-surface-600 dark:text-surface-400 mb-1">Yil</label>
             <input
@@ -705,6 +767,15 @@ export default function FormPage() {
               </span>
             )}
           </span>
+          {busyAction !== "submit" && (
+            <Button
+              variant="outline"
+              onClick={saveDraft}
+              isLoading={busyAction === "save"}
+            >
+              Qoralama saqlash
+            </Button>
+          )}
           <Button onClick={() => persist("pending_dean")} isLoading={busyAction === "submit"}>
             {isRevision ? "Qayta yuborish" : "Yuborish"}
           </Button>
