@@ -88,7 +88,7 @@ export default function MuddatlarPage() {
 
     // Fetch associated user_ids for 'specific' deadlines
     const specificIds = rows.filter((r) => r.applies_to === "specific").map((r) => r.id);
-    let userMap: Record<string, string[]> = {};
+    const userMap: Record<string, string[]> = {};
     if (specificIds.length > 0) {
       const { data: du } = await supabase
         .from("submission_deadline_users")
