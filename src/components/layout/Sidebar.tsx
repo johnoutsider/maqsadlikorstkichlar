@@ -90,6 +90,11 @@ const NAV: NavItem[] = [
         label: "Ilmiy hisobotlar",
         roles: ["university_admin", "science_department", "vice_rector", "dean"],
       },
+      {
+        href: "/muddatlar",
+        label: "Hisobot muddatlari",
+        roles: ["university_admin", "science_department"],
+      },
     ],
   },
   // O'quv jarayoni — temporarily hidden

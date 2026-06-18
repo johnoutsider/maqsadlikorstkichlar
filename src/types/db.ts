@@ -571,6 +571,30 @@ export interface DefenseApplication {
   updated_at: string;
 }
 
+// ============================================================================
+// Submission Deadlines (ilmiy bo'lim tomonidan belgilanadigan muddat)
+// ============================================================================
+
+export type DeadlineScope = 'all' | 'specific';
+
+export interface SubmissionDeadline {
+  id: string;
+  university_id: string;
+  year: number;
+  quarter: Quarter;
+  deadline_at: string; // timestamptz → ISO string
+  applies_to: DeadlineScope;
+  is_active: boolean;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SubmissionDeadlineUser {
+  deadline_id: string;
+  user_id: string;
+}
+
 export interface TelegramContact {
   phone: string;
   chat_id: number;

@@ -13,7 +13,9 @@ import type {
   AppUser,
   Faculty,
   Department,
+  SubmissionDeadline,
 } from "@/types/db";
+import { DeadlineCountdown } from "@/components/DeadlineCountdown";
 import {
   STATUS_LABEL,
   isIndicatorEditable,
@@ -72,6 +74,7 @@ export default function FormPage() {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [reviewerMap, setReviewerMap] = useState<Map<string, string>>(new Map());
+  const [deadline, setDeadline] = useState<SubmissionDeadline | null>(null);
 
   // Auto-save: every value edit / file change is persisted automatically, so
   // there is no manual "save draft" button. Refs mirror the latest values/files
@@ -149,7 +152,7 @@ export default function FormPage() {
     setLoading(true);
     setError("");
     setMessage("");
-    const [subRes, tgtRes] = await Promise.all([
+    const [subRes, tgtRes, dlRes] = await Promise.all([
       supabase
         .from("submissions")
         .select("*")
@@ -163,7 +166,15 @@ export default function FormPage() {
         .eq("department_id", user.department_id)
         .eq("year", year)
         .eq("quarter", quarter)
-        .maybeSingle()
+        .maybeSingle(),
+      supabase
+        .from("submission_deadlines")
+        .select("*")
+        .eq("university_id", user.university_id!)
+        .eq("year", year)
+        .eq("quarter", quarter)
+        .eq("is_active", true)
+        .maybeSingle(),
     ]);
 
     if (subRes.error) setError(subRes.error.message);
@@ -193,6 +204,20 @@ export default function FormPage() {
     const tgt = (tgtRes.data as import("@/types/db").Target) ?? null;
     setTarget(tgt);
 
+    // Deadline: "specific" qamrovda foydalanuvchi ro'yxatda borligini tekshirish
+    const dlRaw = (dlRes.data as SubmissionDeadline) ?? null;
+    if (dlRaw && dlRaw.applies_to === "specific") {
+      const { data: dlUser } = await supabase
+        .from("submission_deadline_users")
+        .select("user_id")
+        .eq("deadline_id", dlRaw.id)
+        .eq("user_id", user.id)
+        .maybeSingle();
+      setDeadline(dlUser ? dlRaw : null);
+    } else {
+      setDeadline(dlRaw);
+    }
+
     const v: Record<string, string> = {};
     const f: Record<string, string[]> = {};
     indicators.forEach((ind) => {
@@ -215,9 +240,14 @@ export default function FormPage() {
 
   const status = submission?.status ?? "draft";
   const reviews = submission?.indicator_reviews ?? {};
+
+  // Deadline lock: muddat o'tganmi va bu userage tegishlimi?
+  const deadlinePassed = deadline !== null && new Date(deadline.deadline_at).getTime() < Date.now();
+
   // Form-level lock: fully locked (no edits, no submit button) when waiting
-  // for a reviewer or already approved.
+  // for a reviewer or already approved, OR when deadline has passed.
   const formLocked =
+    deadlinePassed ||
     status === "pending_dean" ||
     status === "pending" ||
     status === "pending_science" ||
@@ -410,6 +440,7 @@ export default function FormPage() {
 
   const uploadFile = async (indicatorId: string, file: File) => {
     if (!user?.university_id || !user?.department_id) return;
+    if (deadlinePassed) { setError("Muddat tugagan — fayl yuklash mumkin emas."); return; }
     setError("");
     clearUploadError(indicatorId);
     const ind = indicators.find((i) => i.id === indicatorId);
@@ -543,6 +574,16 @@ export default function FormPage() {
         </div>
       </div>
 
+      {/* Deadline countdown banner */}
+      {!loading && deadline && (
+        <div className="mb-4">
+          <DeadlineCountdown
+            deadlineAt={deadline.deadline_at}
+            label={`${year} ${quarter} hisoboti uchun muddat`}
+          />
+        </div>
+      )}
+
       {error && <div className="mb-4 p-3 bg-danger-50 dark:bg-danger-900/30 text-danger-600 dark:text-danger-400 rounded-lg text-sm">{error}</div>}
       {message && <div className="mb-4 p-3 bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-lg text-sm">{message}</div>}
       {!loading && !target && indicators.length > 0 && (
@@ -566,7 +607,7 @@ export default function FormPage() {
           <strong>Umumiy izoh:</strong> {submission.review_comment}
         </div>
       )}
-      {formLocked && (
+      {formLocked && !deadlinePassed && (
         <div className="mb-4 p-3 bg-surface-100 dark:bg-surface-800 text-surface-600 dark:text-surface-400 rounded-lg text-sm">
           Hisobot {STATUS_LABEL[status].text.toLowerCase()}. Tahrirlash mumkin emas.
         </div>

@@ -40,6 +40,7 @@ const BREADCRUMB_LABELS: Record<string, string> = {
   baholash: "Baholash",
   natijalar: "Natijalar",
   "monitoring-natijalari": "Monitoring natijalari",
+  muddatlar: "Hisobot Muddatlari",
   create: "Yangi izlanuvchi",
   edit: "Tahrirlash",
 };
