@@ -203,6 +203,7 @@ export default function SubmissionsListPage() {
           <table className="w-full">
             <thead className="bg-surface-50 dark:bg-surface-900/50 border-b border-surface-200 dark:border-surface-700">
               <tr>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-surface-600 uppercase w-12">№</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-surface-600 uppercase">Fakultet</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-surface-600 uppercase">Kafedra</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-surface-600 uppercase">Yuborgan</th>
@@ -214,7 +215,7 @@ export default function SubmissionsListPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-surface-200 dark:divide-surface-700">
-              {rows.map((s) => {
+              {rows.map((s, idx) => {
                 const depTarget = targets.find((t) => t.department_id === s.department_id && t.year === s.year && t.quarter === s.quarter);
                 let totalScore = 0;
                 let scoredItemsCount = 0;
@@ -236,6 +237,7 @@ export default function SubmissionsListPage() {
 
                 return (
                   <tr key={s.id} className="hover:bg-surface-50 dark:hover:bg-surface-900/30">
+                    <td className="px-4 py-3 text-sm text-surface-500 tabular-nums">{idx + 1}</td>
                     <td className="px-4 py-3 text-sm font-mono">{facById.get(s.faculty_id)?.short_code ?? "?"}</td>
                     <td className="px-4 py-3 text-sm">{depById.get(s.department_id)?.name ?? "?"}</td>
                     <td className="px-4 py-3 text-sm">{submitterMap.get(s.submitted_by) ?? "—"}</td>
