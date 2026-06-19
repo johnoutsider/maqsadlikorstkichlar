@@ -23,6 +23,11 @@ import {
 } from "@/lib/workflow";
 import { buildReviewSummaryEntries, normalizeSubmission } from "@/lib/submission";
 import {
+  calculatePercentageValue,
+  formatCalculatedValue,
+  isPercentageCalculationConfig,
+} from "@/lib/indicator-calculation";
+import {
   acceptAttribute,
   safeStorageFileName,
   validateFile,
@@ -66,6 +71,7 @@ export default function FormPage() {
   const [submission, setSubmission] = useState<Submission | null>(null);
   const [target, setTarget] = useState<import("@/types/db").Target | null>(null);
   const [values, setValues] = useState<Record<string, string>>({});
+  const [calculationInputs, setCalculationInputs] = useState<Record<string, Record<string, string>>>({});
   const [files, setFiles] = useState<Record<string, string[]>>({});
   const [loading, setLoading] = useState(true);
   const [busyAction, setBusyAction] = useState<"submit" | "save" | null>(null);
@@ -81,6 +87,7 @@ export default function FormPage() {
   // so the debounced + post-upload saves never read stale closure state.
   const [autoSaveState, setAutoSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const valuesRef = useRef<Record<string, string>>({});
+  const calculationInputsRef = useRef<Record<string, Record<string, string>>>({});
   const filesRef = useRef<Record<string, string[]>>({});
   const autoSavingRef = useRef(false);
   const pendingSaveRef = useRef(false);
@@ -219,20 +226,35 @@ export default function FormPage() {
     }
 
     const v: Record<string, string> = {};
+    const calc: Record<string, Record<string, string>> = {};
     const f: Record<string, string[]> = {};
     indicators.forEach((ind) => {
       const cell: IndicatorSubmission | undefined = sub?.indicators?.[ind.id];
       v[ind.id] = cell?.value === null || cell?.value === undefined ? "" : String(cell.value);
+      calc[ind.id] = {};
+      const config = isPercentageCalculationConfig(ind.calculation_config)
+        ? ind.calculation_config
+        : null;
+      if (config) {
+        const inputValues = cell?.calculation_inputs ?? {};
+        const fields = [config.denominator, ...config.numerators];
+        fields.forEach((field) => {
+          const value = inputValues[field.key];
+          calc[ind.id][field.key] = value === null || value === undefined ? "" : String(value);
+        });
+      }
       f[ind.id] = cell?.files ?? [];
     });
     valuesRef.current = v;
+    calculationInputsRef.current = calc;
     filesRef.current = f;
     setValues(v);
+    setCalculationInputs(calc);
     setFiles(f);
     setAutoSaveState("idle");
     blockAutoSaveRef.current = false;
     setLoading(false);
-  }, [user?.id, user?.department_id, year, quarter, indicators, supabase]);
+  }, [user?.id, user?.department_id, user?.university_id, year, quarter, indicators, supabase]);
 
   useEffect(() => {
     if (indicators.length > 0) load();
@@ -282,6 +304,7 @@ export default function FormPage() {
   const buildPayload = (newStatus: SubmissionStatus, opts?: { lenient?: boolean }) => {
     if (!user?.university_id || !user?.department_id || !user?.faculty_id) return null;
     const curValues = valuesRef.current;
+    const curCalculationInputs = calculationInputsRef.current;
     const curFiles = filesRef.current;
 
     // Start from the existing submission's indicators so we preserve locked
@@ -293,6 +316,26 @@ export default function FormPage() {
     for (const ind of indicators) {
       const editable = indicatorEditable(ind.id) || status === "draft" || !submission;
       if (!editable) continue;
+      const calculationConfig = isPercentageCalculationConfig(ind.calculation_config)
+        ? ind.calculation_config
+        : null;
+      if (calculationConfig) {
+        const rawInputs = curCalculationInputs[ind.id] ?? {};
+        const calculated = calculatePercentageValue(calculationConfig, rawInputs);
+        const calculationInputsObj: Record<string, number | null> = {};
+        [calculationConfig.denominator, ...calculationConfig.numerators].forEach((field) => {
+          const raw = rawInputs[field.key]?.trim();
+          const numeric = raw ? Number(raw) : null;
+          calculationInputsObj[field.key] =
+            typeof numeric === "number" && Number.isFinite(numeric) ? numeric : null;
+        });
+        indicatorsObj[ind.id] = {
+          value: calculated ?? submission?.indicators?.[ind.id]?.value ?? null,
+          files: curFiles[ind.id] ?? [],
+          calculation_inputs: calculationInputsObj,
+        };
+        continue;
+      }
       const raw = curValues[ind.id]?.trim();
       let value: number | null = null;
       if (raw) {
@@ -343,8 +386,26 @@ export default function FormPage() {
     for (const ind of indicators) {
       const editable = indicatorEditable(ind.id) || status === "draft" || !submission;
       if (!editable) continue;
-      const hasFiles = (filesRef.current[ind.id] ?? []).length > 0;
-      const hasValue = (valuesRef.current[ind.id] ?? "").trim() !== "";
+      const uploadedCount = (filesRef.current[ind.id] ?? []).length;
+      const minFiles = ind.min_files ?? 0;
+      const hasFiles = uploadedCount > 0;
+      if (uploadedCount < minFiles) {
+        setError(`"${ind.no}. ${ind.name}" — kamida ${minFiles} ta fayl yuklanishi kerak. Hozir: ${uploadedCount} ta.`);
+        blockAutoSaveRef.current = false;
+        return;
+      }
+      const calculationConfig = isPercentageCalculationConfig(ind.calculation_config)
+        ? ind.calculation_config
+        : null;
+      const calculatedValue = calculationConfig
+        ? calculatePercentageValue(calculationConfig, calculationInputsRef.current[ind.id] ?? {})
+        : null;
+      const hasStoredValue =
+        submission?.indicators?.[ind.id]?.value !== null &&
+        submission?.indicators?.[ind.id]?.value !== undefined;
+      const hasValue = calculationConfig
+        ? calculatedValue !== null || hasStoredValue
+        : (valuesRef.current[ind.id] ?? "").trim() !== "";
       if (hasFiles && !hasValue) {
         setError(`"${ind.no}. ${ind.name}" — fayl yuklangan, ammo raqam kiritilmagan. Iltimos, raqam kiriting.`);
         blockAutoSaveRef.current = false;
@@ -635,14 +696,27 @@ export default function FormPage() {
               {indicators.map((ind) => {
                 const f = files[ind.id] ?? [];
                 const fileRule = submissionFileRule(ind.allowed_file_extensions);
+                const minFiles = ind.min_files ?? 0;
+                const fileRequirementMet = f.length >= minFiles;
                 const maqsad = target?.values?.[ind.id] ?? null;
+                const calculationConfig = isPercentageCalculationConfig(ind.calculation_config)
+                  ? ind.calculation_config
+                  : null;
+                const calculatedValue = calculationConfig
+                  ? calculatePercentageValue(calculationConfig, calculationInputs[ind.id] ?? {})
+                  : null;
+                const displayedValue = calculationConfig
+                  ? calculatedValue !== null ? formatCalculatedValue(calculatedValue) : ""
+                  : values[ind.id] ?? "";
                 const parseNum = (v: string) => { const n = Number(v); return isNaN(n) ? 0 : n; };
-                const qiymat = values[ind.id] ? parseNum(values[ind.id]) : null;
-                let foiz = "—";
-                if (typeof maqsad === "number" && maqsad > 0 && typeof qiymat === "number") {
+                const qiymat = calculationConfig
+                  ? calculatedValue ?? (values[ind.id] ? parseNum(values[ind.id]) : null)
+                  : values[ind.id] ? parseNum(values[ind.id]) : null;
+                let foiz = "—";
+                if (!calculationConfig && typeof maqsad === "number" && maqsad > 0 && typeof qiymat === "number") {
                    const p = (qiymat / maqsad) * 100;
                    foiz = (p > 100 ? 100 : p).toFixed(1) + "%";
-                } else if (typeof maqsad === "number" && maqsad === 0 && typeof qiymat === "number" && qiymat >= 0) {
+                } else if (!calculationConfig && typeof maqsad === "number" && maqsad === 0 && typeof qiymat === "number" && qiymat >= 0) {
                    foiz = "100.0%";
                 }
 
@@ -658,9 +732,62 @@ export default function FormPage() {
                     <td className="px-4 py-3 text-sm font-mono">{ind.no}</td>
                     <td className={`px-4 py-3 text-sm ${ind.is_sub_indicator ? "pl-8 text-surface-600" : ""}`}>
                       {ind.name}
+                      {ind.description && (
+                        <div className="mt-2 rounded-md border border-blue-100 dark:border-blue-900/50 bg-blue-50/70 dark:bg-blue-900/10 px-3 py-2 text-sm leading-relaxed text-blue-800 dark:text-blue-200">
+                          <span className="font-semibold">Izoh:</span> {ind.description}
+                        </div>
+                      )}
                       {rej && (
                         <div className="mt-1 text-xs text-danger-700 dark:text-danger-400">
                           <strong>{rej.stage} rad etdi:</strong> {rej.comment || "(izohsiz)"}
+                        </div>
+                      )}
+                      {calculationConfig && (
+                        <div className="mt-3 rounded-md border border-blue-100 dark:border-blue-900/50 bg-blue-50/50 dark:bg-blue-900/10 p-3">
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            {[calculationConfig.denominator, ...calculationConfig.numerators].map((field) => (
+                              <label key={field.key} className="text-xs text-surface-500 dark:text-surface-400">
+                                <span className="block mb-1 leading-tight">{field.label}</span>
+                                <input
+                                  type="number"
+                                  step="any"
+                                  value={calculationInputs[ind.id]?.[field.key] ?? ""}
+                                  onChange={(e) => {
+                                    const next = e.target.value;
+                                    const nextForIndicator = {
+                                      ...(calculationInputsRef.current[ind.id] ?? {}),
+                                      [field.key]: next,
+                                    };
+                                    const nextAll = {
+                                      ...calculationInputsRef.current,
+                                      [ind.id]: nextForIndicator,
+                                    };
+                                    const nextCalculated = calculatePercentageValue(
+                                      calculationConfig,
+                                      nextForIndicator
+                                    );
+                                    calculationInputsRef.current = nextAll;
+                                    setCalculationInputs(nextAll);
+                                    if (nextCalculated !== null) {
+                                      const formatted = formatCalculatedValue(nextCalculated);
+                                      valuesRef.current = { ...valuesRef.current, [ind.id]: formatted };
+                                      setValues((current) => ({ ...current, [ind.id]: formatted }));
+                                    } else {
+                                      valuesRef.current = { ...valuesRef.current, [ind.id]: "" };
+                                      setValues((current) => ({ ...current, [ind.id]: "" }));
+                                    }
+                                    scheduleAutoSave();
+                                  }}
+                                  onBlur={() => {
+                                    if (debounceRef.current) clearTimeout(debounceRef.current);
+                                    void autoPersistRef.current();
+                                  }}
+                                  disabled={!editable}
+                                  className="w-full rounded-md border border-surface-300 dark:border-surface-600 bg-white dark:bg-surface-800 px-2 py-1.5 text-sm disabled:opacity-60"
+                                />
+                              </label>
+                            ))}
+                          </div>
                         </div>
                       )}
                     </td>
@@ -671,10 +798,11 @@ export default function FormPage() {
                     <td className="px-4 py-3">
                       <div className="relative">
                         <input
-                          type="number"
+                          type={calculationConfig ? "text" : "number"}
                           step="any"
-                          value={values[ind.id] ?? ""}
+                          value={calculationConfig ? displayedValue : values[ind.id] ?? ""}
                           onChange={(e) => {
+                            if (calculationConfig) return;
                             const next = e.target.value;
                             valuesRef.current = { ...valuesRef.current, [ind.id]: next };
                             setValues((p) => ({ ...p, [ind.id]: next }));
@@ -684,14 +812,16 @@ export default function FormPage() {
                             if (debounceRef.current) clearTimeout(debounceRef.current);
                             void autoPersistRef.current();
                           }}
-                          disabled={!editable}
+                          disabled={!editable || !!calculationConfig}
                           className={`w-full rounded-md border px-2 py-1.5 text-sm disabled:opacity-60 ${
-                            (f.length > 0 && !(values[ind.id] ?? "").trim())
+                            (!calculationConfig && f.length > 0 && !(values[ind.id] ?? "").trim())
                               ? "border-amber-400 dark:border-amber-500 bg-amber-50 dark:bg-amber-900/20"
-                              : "border-surface-300 dark:border-surface-600 bg-white dark:bg-surface-800"
+                              : calculationConfig
+                                ? "border-surface-300 dark:border-surface-600 bg-surface-50 dark:bg-surface-900 text-center font-medium"
+                                : "border-surface-300 dark:border-surface-600 bg-white dark:bg-surface-800"
                           }`}
                         />
-                        {editable && f.length > 0 && !(values[ind.id] ?? "").trim() && (
+                        {editable && !calculationConfig && f.length > 0 && !(values[ind.id] ?? "").trim() && (
                           <span
                             title="Fayl yuklangan — raqam kiriting"
                             className="absolute right-1.5 top-1/2 -translate-y-1/2 text-amber-500 text-xs leading-none pointer-events-none"
@@ -731,6 +861,17 @@ export default function FormPage() {
                         {(ind.min_pages !== null || ind.max_pages !== null) && (
                           <div className="text-[10px] text-surface-400 dark:text-surface-500">
                             PDF: {ind.min_pages ?? 1}–{ind.max_pages ?? "∞"} bet
+                          </div>
+                        )}
+                        {minFiles > 0 && (
+                          <div
+                            className={`text-[10px] font-medium rounded-md px-2 py-1 border ${
+                              fileRequirementMet
+                                ? "bg-green-50 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-300 dark:border-green-800"
+                                : "bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-900/20 dark:text-amber-300 dark:border-amber-800"
+                            }`}
+                          >
+                            Yuklangan: {f.length} / {minFiles}
                           </div>
                         )}
                         {editable && (

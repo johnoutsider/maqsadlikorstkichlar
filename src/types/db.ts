@@ -107,15 +107,31 @@ export interface Indicator {
   university_id: string;
   no: string;
   name: string;
+  description: string | null;
   unit: string;
   order_idx: number;
   is_sub_indicator: boolean;
   parent_id: string | null;
   min_pages: number | null;
   max_pages: number | null;
+  min_files: number;
   allowed_file_extensions: string[];
+  calculation_config: IndicatorCalculationConfig | null;
   created_at: string;
 }
+
+export interface IndicatorCalculationField {
+  key: string;
+  label: string;
+}
+
+export interface PercentageCalculationConfig {
+  type: "percentage";
+  denominator: IndicatorCalculationField;
+  numerators: IndicatorCalculationField[];
+}
+
+export type IndicatorCalculationConfig = PercentageCalculationConfig;
 
 export interface Target {
   id: string;
@@ -132,6 +148,7 @@ export interface Target {
 export interface IndicatorSubmission {
   value: number | null;
   files: string[]; // storage paths within `submissions` bucket
+  calculation_inputs?: Record<string, number | null>;
 }
 
 export interface Submission {

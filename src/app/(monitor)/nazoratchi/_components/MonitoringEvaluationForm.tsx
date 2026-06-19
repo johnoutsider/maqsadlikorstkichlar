@@ -137,8 +137,10 @@ function Field({
 
 export function MonitoringEvaluationForm({
   evaluationId,
+  readOnly = false,
 }: {
   evaluationId?: string;
+  readOnly?: boolean;
 }) {
   const supabaseRef = useRef(createClient());
   const supabase = supabaseRef.current;
@@ -171,6 +173,12 @@ export function MonitoringEvaluationForm({
   const initialCommentsRef = useRef<Record<string, string>>({});
   const [logs, setLogs] = useState<MonitoringEvaluationLog[]>([]);
   const [logsLoading, setLogsLoading] = useState(false);
+  const resultsPath =
+    user?.role === "science_department" ||
+    user?.role === "university_admin" ||
+    user?.role === "super_admin"
+      ? "/monitoring-natijalari"
+      : "/nazoratchi/natijalar";
 
   useEffect(() => {
     if (!user?.university_id) return;
@@ -220,7 +228,7 @@ export function MonitoringEvaluationForm({
         setEditLoading(false);
         return;
       }
-      if (data.created_by !== currentUserId) {
+      if (!readOnly && data.created_by !== currentUserId) {
         setError("Bu monitoring natijasini tahrirlashga ruxsat yo'q.");
         setEditLoading(false);
         return;
@@ -286,7 +294,7 @@ export function MonitoringEvaluationForm({
     return () => {
       cancelled = true;
     };
-  }, [evaluationId, supabase, user?.id, user?.university_id]);
+  }, [evaluationId, readOnly, supabase, user?.id, user?.university_id]);
 
   async function loadLogs() {
     if (!evaluationId) return;
@@ -443,6 +451,7 @@ export function MonitoringEvaluationForm({
   }, [isDsc, scores]);
 
   function chooseTuri(nextTuri: IzlanuvchiTuri) {
+    if (readOnly) return;
     setResearcherTuri(nextTuri);
     setSearchQuery("");
     setSearchResults([]);
@@ -454,6 +463,10 @@ export function MonitoringEvaluationForm({
   }
 
   function resetEvaluation() {
+    if (readOnly) {
+      router.push(resultsPath);
+      return;
+    }
     if (evaluationId) {
       router.replace("/nazoratchi/baholash");
     }
@@ -469,6 +482,7 @@ export function MonitoringEvaluationForm({
   }
 
   function selectResearcher(result: SearchResult) {
+    if (readOnly) return;
     setSelected(result);
     setForm({
       fullName: result.fullName,
@@ -490,6 +504,7 @@ export function MonitoringEvaluationForm({
   }
 
   function updateScore(key: string, value: string, maxScore: number) {
+    if (readOnly) return;
     if (value === "") {
       setScores((current) => {
         const next = { ...current };
@@ -561,6 +576,10 @@ export function MonitoringEvaluationForm({
 
   async function saveEvaluation() {
     setError("");
+    if (readOnly) {
+      setError("Bu sahifa faqat ko'rish rejimida ochilgan.");
+      return;
+    }
     if (!user?.university_id || !selected) {
       setError("Avval izlanuvchini qidirib tanlang.");
       return;
@@ -738,7 +757,9 @@ export function MonitoringEvaluationForm({
             Nazoratchi
           </p>
           <h1 className="mt-1 text-3xl font-extrabold text-slate-900 dark:text-surface-100">
-            {evaluationId
+            {readOnly
+              ? "Monitoring natijasini ko'rish"
+              : evaluationId
               ? "Monitoring natijasini tahrirlash"
               : "Izlanuvchilar faoliyatini baholash"}
           </h1>
@@ -748,10 +769,12 @@ export function MonitoringEvaluationForm({
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" size="md" onClick={resetEvaluation}>
-            + Yangi baholash
-          </Button>
-          <Link href="/nazoratchi/natijalar">
+          {!readOnly && (
+            <Button variant="outline" size="md" onClick={resetEvaluation}>
+              + Yangi baholash
+            </Button>
+          )}
+          <Link href={resultsPath}>
             <Button size="md">Natijalarni ko&apos;rish</Button>
           </Link>
         </div>
@@ -883,7 +906,7 @@ export function MonitoringEvaluationForm({
       {evaluationId && !editLoading && selected && (
         <section className="mb-7 rounded-xl border border-blue-200 bg-blue-50 px-5 py-4 dark:border-blue-900 dark:bg-blue-950/30">
           <p className="text-xs font-bold uppercase tracking-[0.08em] text-blue-700">
-            Tahrirlanmoqda
+            {readOnly ? "Ko'rish rejimi" : "Tahrirlanmoqda"}
           </p>
           <p className="mt-1 font-semibold text-slate-900 dark:text-surface-100">
             {selected.fullName}
@@ -895,6 +918,7 @@ export function MonitoringEvaluationForm({
         <Field
           label="F.I.Sh."
           value={form.fullName}
+          readOnly={readOnly}
           onChange={(value) =>
             setForm((current) => ({ ...current, fullName: value }))
           }
@@ -905,13 +929,14 @@ export function MonitoringEvaluationForm({
           </span>
           <select
             value={form.departmentId}
+            disabled={readOnly}
             onChange={(event) =>
               setForm((current) => ({
                 ...current,
                 departmentId: event.target.value,
               }))
             }
-            className={fieldClassName()}
+            className={fieldClassName(readOnly)}
           >
             <option value="">Kafedrani tanlang</option>
             {departments.map((department) => (
@@ -933,6 +958,7 @@ export function MonitoringEvaluationForm({
         <Field
           label="Ixtisoslik shifri"
           value={form.specialtyCode}
+          readOnly={readOnly}
           onChange={(value) =>
             setForm((current) => ({ ...current, specialtyCode: value }))
           }
@@ -941,6 +967,7 @@ export function MonitoringEvaluationForm({
         <Field
           label="Qabul yili"
           value={form.admissionYear}
+          readOnly={readOnly}
           onChange={(value) =>
             setForm((current) => ({ ...current, admissionYear: value }))
           }
@@ -950,6 +977,7 @@ export function MonitoringEvaluationForm({
           label="Topshirgan vaqti"
           type="date"
           value={form.submissionDate}
+          readOnly={readOnly}
           onChange={(value) =>
             setForm((current) => ({ ...current, submissionDate: value }))
           }
@@ -957,6 +985,7 @@ export function MonitoringEvaluationForm({
         <Field
           label="Kursi"
           value={form.course}
+          readOnly={readOnly}
           onChange={(value) =>
             setForm((current) => ({ ...current, course: value }))
           }
@@ -966,6 +995,7 @@ export function MonitoringEvaluationForm({
           <Field
             label="Dissertatsiya mavzusi"
             value={form.researchTopic}
+            readOnly={readOnly}
             onChange={(value) =>
               setForm((current) => ({ ...current, researchTopic: value }))
             }
@@ -974,6 +1004,7 @@ export function MonitoringEvaluationForm({
         <Field
           label="Ilmiy rahbari F.I.Sh. (daraja va unvoni)"
           value={form.advisor}
+          readOnly={readOnly}
           onChange={(value) =>
             setForm((current) => ({ ...current, advisor: value }))
           }
@@ -981,6 +1012,7 @@ export function MonitoringEvaluationForm({
         <Field
           label="Monitoring davri"
           value={form.period}
+          readOnly={readOnly}
           onChange={(value) =>
             setForm((current) => ({ ...current, period: value }))
           }
@@ -1053,7 +1085,7 @@ export function MonitoringEvaluationForm({
                           min={0}
                           max={item.maxScore}
                           step={1}
-                          disabled={disabled}
+                          disabled={disabled || readOnly}
                           value={scores[item.key] ?? ""}
                           onChange={(event) =>
                             updateScore(
@@ -1076,7 +1108,7 @@ export function MonitoringEvaluationForm({
                           rows={1}
                           wrap="soft"
                           tabIndex={-1}
-                          disabled={disabled}
+                          disabled={disabled || readOnly}
                           value={comments[item.key] ?? ""}
                           placeholder="Izoh..."
                           onChange={(event) => {
@@ -1218,27 +1250,29 @@ export function MonitoringEvaluationForm({
         </section>
       )}
 
-      <div className="flex justify-end border-t border-slate-200 pt-6 dark:border-surface-700">
-        <Button
-          size="lg"
-          isLoading={saving}
-          disabled={!selected || editLoading}
-          onClick={saveEvaluation}
-        >
-          <svg
-            width="18"
-            height="18"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
+      {!readOnly && (
+        <div className="flex justify-end border-t border-slate-200 pt-6 dark:border-surface-700">
+          <Button
+            size="lg"
+            isLoading={saving}
+            disabled={!selected || editLoading}
+            onClick={saveEvaluation}
           >
-            <path d="M5 3h12l2 2v16H5V3z" />
-            <path d="M8 3v6h8V3M8 21v-7h8v7" />
-          </svg>
-          {evaluationId ? "O'zgarishlarni saqlash" : "Saqlash"}
-        </Button>
-      </div>
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              <path d="M5 3h12l2 2v16H5V3z" />
+              <path d="M8 3v6h8V3M8 21v-7h8v7" />
+            </svg>
+            {evaluationId ? "O'zgarishlarni saqlash" : "Saqlash"}
+          </Button>
+        </div>
+      )}
 
       <Modal
         isOpen={Boolean(savedResult)}
@@ -1263,7 +1297,7 @@ export function MonitoringEvaluationForm({
               <Button variant="outline" onClick={() => setSavedResult(null)}>
                 Yopish
               </Button>
-              <Link href="/nazoratchi/natijalar">
+              <Link href={resultsPath}>
                 <Button>Natijalarga o&apos;tish</Button>
               </Link>
             </div>

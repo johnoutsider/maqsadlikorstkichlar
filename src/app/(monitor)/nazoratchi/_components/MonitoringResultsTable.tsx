@@ -15,6 +15,7 @@ import type {
 type ResultRow = MonitoringEvaluation & {
   departments?: { name?: string | null } | null;
   monitoring_evaluation_items?: MonitoringEvaluationItem[];
+  monitoring_evaluation_logs?: { id: string }[];
   assessor?: { display_name?: string | null; email?: string | null } | null;
 };
 
@@ -69,7 +70,7 @@ export function MonitoringResultsTable() {
     let request = supabase
       .from("monitoring_evaluations")
       .select(
-        "*, departments(name), monitoring_evaluation_items(*), assessor:users!monitoring_evaluations_created_by_fkey(display_name,email)"
+        "*, departments(name), monitoring_evaluation_items(*), monitoring_evaluation_logs(id), assessor:users!monitoring_evaluations_created_by_fkey(display_name,email)"
       )
       .eq("university_id", user.university_id);
 
@@ -417,6 +418,7 @@ export function MonitoringResultsTable() {
                     "Monitoring davri",
                     "Natija",
                     "Sana",
+                    "Status",
                     "Harakatlar",
                   ].map((heading) => (
                     <th
@@ -473,6 +475,13 @@ export function MonitoringResultsTable() {
                       }).format(new Date(row.created_at))}
                     </td>
                     <td className="px-4 py-3">
+                      {row.monitoring_evaluation_logs?.length ? (
+                        <span className="inline-flex rounded-full bg-blue-100 px-3 py-1 text-xs font-bold text-blue-700 dark:bg-blue-950/40 dark:text-blue-300">
+                          O&apos;zgargan
+                        </span>
+                      ) : null}
+                    </td>
+                    <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
                         <Button
                           variant="outline"
@@ -489,6 +498,13 @@ export function MonitoringResultsTable() {
                               <Button size="sm">Tahrirlash</Button>
                             </Link>
                           )}
+                        {user?.role === "science_department" && (
+                          <Link
+                            href={`/monitoring-natijalari/${row.id}/edit`}
+                          >
+                            <Button size="sm">Tahrirlash</Button>
+                          </Link>
+                        )}
                         {user?.role === "science_department" && (
                           <Button
                             variant="danger"

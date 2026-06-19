@@ -3,8 +3,13 @@ import { MonitoringEvaluationForm } from "../_components/MonitoringEvaluationFor
 export default async function MonitoringBaholashPage({
   searchParams,
 }: {
-  searchParams: Promise<{ edit?: string }>;
+  searchParams: Promise<{ edit?: string; view?: string }>;
 }) {
   const params = await searchParams;
-  return <MonitoringEvaluationForm evaluationId={params.edit} />;
+  return (
+    <MonitoringEvaluationForm
+      evaluationId={params.edit}
+      readOnly={params.view === "1"}
+    />
+  );
 }

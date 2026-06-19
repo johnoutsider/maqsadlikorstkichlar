@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useSupabaseAuth } from "@/contexts/SupabaseAuthContext";
 import type { Submission, Faculty, Department, Quarter, SubmissionStatus } from "@/types/db";
 import { STATUS_LABEL, SELECTABLE_STATUSES } from "@/lib/workflow";
+import { getSubmissionScorePercent } from "@/lib/indicator-calculation";
 
 const QUARTERS: Quarter[] = ["Q1", "Q2", "Q3", "Q4"];
 
@@ -222,14 +223,10 @@ export default function SubmissionsListPage() {
 
                 indicators.forEach(ind => {
                   const maqsad = depTarget?.values?.[ind.id] ?? null;
-                  const qiymat = s.indicators[ind.id]?.value ?? null;
-                  if (typeof maqsad === "number" && typeof qiymat === "number") {
+                  const score = getSubmissionScorePercent(maqsad, s.indicators[ind.id]);
+                  if (typeof score === "number") {
                     scoredItemsCount++;
-                    if (maqsad > 0) {
-                      totalScore += Math.min((qiymat / maqsad) * 100, 100);
-                    } else if (maqsad === 0 && qiymat >= 0) {
-                      totalScore += 100;
-                    }
+                    totalScore += score;
                   }
                 });
 
@@ -268,7 +265,5 @@ export default function SubmissionsListPage() {
     </div>
   );
 }
-
-
 
 
