@@ -387,13 +387,9 @@ export default function FormPage() {
       const editable = indicatorEditable(ind.id) || status === "draft" || !submission;
       if (!editable) continue;
       const uploadedCount = (filesRef.current[ind.id] ?? []).length;
-      const minFiles = ind.min_files ?? 0;
       const hasFiles = uploadedCount > 0;
-      if (uploadedCount < minFiles) {
-        setError(`"${ind.no}. ${ind.name}" — kamida ${minFiles} ta fayl yuklanishi kerak. Hozir: ${uploadedCount} ta.`);
-        blockAutoSaveRef.current = false;
-        return;
-      }
+      // Fayl yuklash talabi (min_files) majburiy emas — faqat ko'rsatkich sifatida
+      // ko'rsatiladi (badge), submission'ni bloklamaydi.
       const calculationConfig = isPercentageCalculationConfig(ind.calculation_config)
         ? ind.calculation_config
         : null;
