@@ -111,9 +111,9 @@ export default function IndicatorsPage() {
         files: { url: string; name: string }[];
       };
 
-      // Stream the ZIP straight to disk: files are fetched one at a time and piped
-      // into the archive as bytes arrive, so neither the server nor the browser
-      // ever holds all files in memory. Handles thousands of files / many GB.
+      // Stream the ZIP straight to disk. Files are prefetched in a sliding window
+      // (CONCURRENCY in flight) so byte transfer happens in parallel, but they are
+      // yielded to the archive in order. Memory stays bounded to ~window * filesize.
       const [{ downloadZip }, streamSaverMod] = await Promise.all([
         import("client-zip"),
         import("streamsaver"),
@@ -121,20 +121,30 @@ export default function IndicatorsPage() {
       const streamSaver = streamSaverMod.default;
       streamSaver.mitm = "/streamsaver/mitm.html";
 
+      // ponytail: 12 parallel downloads — well past the HTTP/2 sweet spot, capped
+      // so memory and the connection pool stay sane. Raise only if measured slow.
+      const CONCURRENCY = 12;
       let done = 0;
-      async function* lazyFiles() {
-        // ponytail: sequential fetch — memory-safe; if too slow, prefetch a small
-        // window (e.g. 4 ahead) concurrently.
-        for (const f of files) {
-          const fileRes = await fetch(f.url);
+      async function* prefetchedFiles() {
+        const queue: { name: string; blob: Promise<Blob> }[] = [];
+        let next = 0;
+        const startOne = (i: number) => ({
+          name: `${folderName}/${files[i].name}`,
+          blob: fetch(files[i].url).then((r) => r.blob()),
+        });
+        while (next < files.length && queue.length < CONCURRENCY) queue.push(startOne(next++));
+        while (queue.length) {
+          const item = queue.shift()!;
+          const blob = await item.blob;
           done += 1;
           setDownloadProgress(Math.round((done / files.length) * 100));
-          yield { name: `${folderName}/${f.name}`, input: fileRes };
+          if (next < files.length) queue.push(startOne(next++));
+          yield { name: item.name, input: blob };
         }
       }
 
       const fileStream = streamSaver.createWriteStream(zipName);
-      const zipBody = downloadZip(lazyFiles()).body;
+      const zipBody = downloadZip(prefetchedFiles()).body;
       if (!zipBody) throw new Error("ZIP oqimini yaratib bo'lmadi.");
       await zipBody.pipeTo(fileStream);
     } catch (e) {
