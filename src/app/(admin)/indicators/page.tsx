@@ -6,12 +6,16 @@ import { useSupabaseAuth } from "@/contexts/SupabaseAuthContext";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
-import type { Indicator, IndicatorCalculationConfig } from "@/types/db";
+import type { Indicator, IndicatorCalculationConfig, IndicatorSubmission, Quarter } from "@/types/db";
 import { isPercentageCalculationConfig } from "@/lib/indicator-calculation";
 import {
   DEFAULT_SUBMISSION_FILE_EXTENSIONS,
   SUBMISSION_FILE_FORMATS,
 } from "@/lib/upload-validation";
+import { QUARTER_LABELS } from "@/lib/constants";
+
+const QUARTERS: Quarter[] = ["Q1", "Q2", "Q3", "Q4"];
+const CAN_DOWNLOAD_ROLES = ["university_admin", "vice_rector", "science_department", "super_admin"];
 
 export default function IndicatorsPage() {
   const supabase = createClient();
@@ -20,6 +24,13 @@ export default function IndicatorsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [reordering, setReordering] = useState(false);
+
+  const canDownload = !!user?.role && CAN_DOWNLOAD_ROLES.includes(user.role);
+  const [fileYear, setFileYear] = useState<number>(new Date().getFullYear());
+  const [fileQuarter, setFileQuarter] = useState<Quarter | "">("");
+  const [fileCounts, setFileCounts] = useState<Map<string, number>>(new Map());
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [downloadProgress, setDownloadProgress] = useState(0);
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Indicator | null>(null);
@@ -59,6 +70,80 @@ export default function IndicatorsPage() {
   }, [supabase, user?.university_id]);
 
   useEffect(() => { load(); }, [load]);
+
+  const loadFileCounts = useCallback(async () => {
+    if (!user?.university_id || !canDownload) return;
+    let q = supabase
+      .from("submissions")
+      .select("indicators")
+      .eq("university_id", user.university_id)
+      .eq("year", fileYear);
+    if (fileQuarter) q = q.eq("quarter", fileQuarter);
+    const { data } = await q;
+    const counts = new Map<string, number>();
+    for (const row of data ?? []) {
+      const indicators = (row.indicators ?? {}) as Record<string, IndicatorSubmission>;
+      for (const [indicatorId, entry] of Object.entries(indicators)) {
+        const fileCount = entry?.files?.length ?? 0;
+        if (fileCount > 0) counts.set(indicatorId, (counts.get(indicatorId) ?? 0) + fileCount);
+      }
+    }
+    setFileCounts(counts);
+  }, [supabase, user?.university_id, canDownload, fileYear, fileQuarter]);
+
+  useEffect(() => { loadFileCounts(); }, [loadFileCounts]);
+
+  const downloadAll = async (indicator: Indicator) => {
+    setDownloadingId(indicator.id);
+    setDownloadProgress(0);
+    try {
+      const params = new URLSearchParams({ year: String(fileYear) });
+      if (fileQuarter) params.set("quarter", fileQuarter);
+      const res = await fetch(`/api/indicators/${indicator.id}/signed-urls?${params}`);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        alert(body.error ?? "Fayllarni yuklab bo'lmadi.");
+        return;
+      }
+      const { folderName, zipName, files } = (await res.json()) as {
+        folderName: string;
+        zipName: string;
+        files: { url: string; name: string }[];
+      };
+
+      // Stream the ZIP straight to disk: files are fetched one at a time and piped
+      // into the archive as bytes arrive, so neither the server nor the browser
+      // ever holds all files in memory. Handles thousands of files / many GB.
+      const [{ downloadZip }, streamSaverMod] = await Promise.all([
+        import("client-zip"),
+        import("streamsaver"),
+      ]);
+      const streamSaver = streamSaverMod.default;
+      streamSaver.mitm = "/streamsaver/mitm.html";
+
+      let done = 0;
+      async function* lazyFiles() {
+        // ponytail: sequential fetch — memory-safe; if too slow, prefetch a small
+        // window (e.g. 4 ahead) concurrently.
+        for (const f of files) {
+          const fileRes = await fetch(f.url);
+          done += 1;
+          setDownloadProgress(Math.round((done / files.length) * 100));
+          yield { name: `${folderName}/${f.name}`, input: fileRes };
+        }
+      }
+
+      const fileStream = streamSaver.createWriteStream(zipName);
+      const zipBody = downloadZip(lazyFiles()).body;
+      if (!zipBody) throw new Error("ZIP oqimini yaratib bo'lmadi.");
+      await zipBody.pipeTo(fileStream);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Yuklab olishda xatolik.");
+    } finally {
+      setDownloadingId(null);
+      setDownloadProgress(0);
+    }
+  };
 
   // parent indicators = non-sub indicators that other rows can be grouped under
   const parentOptions = rows.filter((r) => !r.is_sub_indicator);
@@ -277,6 +362,32 @@ export default function IndicatorsPage() {
         <Button onClick={openCreate}>+ Yangi ko&apos;rsatkich</Button>
       </div>
 
+      {canDownload && (
+        <div className="mb-4 flex items-end gap-3 bg-white dark:bg-surface-800 rounded-lg border border-surface-200 dark:border-surface-700 p-3">
+          <div>
+            <label className="block text-xs font-medium text-surface-600 dark:text-surface-400 mb-1">Yil</label>
+            <input
+              type="number"
+              value={fileYear}
+              onChange={(e) => setFileYear(Number(e.target.value))}
+              className="w-24 rounded-md border border-surface-300 dark:border-surface-600 bg-white dark:bg-surface-800 px-3 py-2 text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-surface-600 dark:text-surface-400 mb-1">Chorak</label>
+            <select
+              value={fileQuarter}
+              onChange={(e) => setFileQuarter(e.target.value as Quarter | "")}
+              className="rounded-md border border-surface-300 dark:border-surface-600 bg-white dark:bg-surface-800 px-3 py-2 text-sm"
+            >
+              <option value="">Barchasi</option>
+              {QUARTERS.map((q) => <option key={q} value={q}>{QUARTER_LABELS[q]}</option>)}
+            </select>
+          </div>
+          <p className="text-xs text-surface-400 pb-2">Fayllar soni va yuklab olish shu davr bo&apos;yicha hisoblanadi</p>
+        </div>
+      )}
+
       {error && (
         <div className="mb-4 p-3 bg-danger-50 dark:bg-danger-900/30 text-danger-600 dark:text-danger-400 rounded-lg text-sm">{error}</div>
       )}
@@ -296,6 +407,9 @@ export default function IndicatorsPage() {
                 <th className="px-4 py-3 text-left text-xs font-semibold text-surface-600 uppercase w-24">Birlik</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-surface-600 uppercase w-28">Turi</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-surface-600 uppercase w-52">Fayl formatlari</th>
+                {canDownload && (
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-surface-600 uppercase w-44">Yuklangan fayllar</th>
+                )}
                 <th className="px-4 py-3" />
               </tr>
             </thead>
@@ -388,6 +502,22 @@ export default function IndicatorsPage() {
                         ))}
                       </div>
                     </td>
+                    {canDownload && (
+                      <td className="px-4 py-3 text-sm">
+                        <div className="flex items-center gap-2">
+                          <span className="text-surface-500">{fileCounts.get(ind.id) ?? 0} ta</span>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={!fileCounts.get(ind.id) || downloadingId === ind.id}
+                            isLoading={downloadingId === ind.id}
+                            onClick={() => downloadAll(ind)}
+                          >
+                            {downloadingId === ind.id ? `${downloadProgress}%` : "Yuklab olish"}
+                          </Button>
+                        </div>
+                      </td>
+                    )}
                     <td className="px-4 py-3 text-right space-x-2">
                       <Button variant="outline" size="sm" onClick={() => openEdit(ind)}>Tahrirlash</Button>
                       <Button variant="danger" size="sm" onClick={() => remove(ind)}>O&apos;chirish</Button>
