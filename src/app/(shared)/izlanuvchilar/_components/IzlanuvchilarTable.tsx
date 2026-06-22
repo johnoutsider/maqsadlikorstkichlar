@@ -110,6 +110,42 @@ function departmentName(row: Izlanuvchi) {
   return department?.name ?? null;
 }
 
+type HalfYearScores = { h1: number | null; h2: number | null };
+
+function scoreClass(score: number) {
+  if (score >= 80) return "bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-300";
+  if (score >= 60) return "bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300";
+  return "bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300";
+}
+
+// ponytail: parses the period string produced by MonitoringEvaluationForm
+// ("2026 yil, 1 yarim yillik hisobot") instead of adding a dedicated year/half column.
+function parseMonitoringPeriod(period: string) {
+  const year = period.match(/(\d{4})\s*yil/)?.[1];
+  const half = period.match(/([12])\s*yarim/)?.[1];
+  return { year: year ?? "", half: half ?? "" };
+}
+
+function latestHalfYearScores(
+  evaluations: { monitoring_period: string; total_score: number; created_at: string }[]
+): HalfYearScores {
+  if (!evaluations.length) return { h1: null, h2: null };
+  const latestYear = evaluations.reduce((max, item) => {
+    const { year } = parseMonitoringPeriod(item.monitoring_period);
+    return year > max ? year : max;
+  }, "");
+
+  const pickLatest = (half: string) =>
+    evaluations
+      .filter((item) => {
+        const parsed = parseMonitoringPeriod(item.monitoring_period);
+        return parsed.year === latestYear && parsed.half === half;
+      })
+      .sort((a, b) => b.created_at.localeCompare(a.created_at))[0]?.total_score ?? null;
+
+  return { h1: pickLatest("1"), h2: pickLatest("2") };
+}
+
 export function IzlanuvchilarTable({
   turi,
   title,
@@ -126,6 +162,9 @@ export function IzlanuvchilarTable({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [rows, setRows] = useState<Izlanuvchi[]>(getIzlanuvchilarCache(turi) ?? []);
+  const [monitoringByIzlanuvchi, setMonitoringByIzlanuvchi] = useState<
+    Record<string, HalfYearScores>
+  >({});
   const [loading, setLoading] = useState(getIzlanuvchilarCache(turi) === null);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
@@ -181,6 +220,36 @@ export function IzlanuvchilarTable({
       setIzlanuvchilarCache(turi, nextRows);
       setRows(nextRows);
       setLoading(false);
+
+      if (nextRows.length) {
+        // ponytail: fetch all evaluations and group client-side. Filtering by
+        // .in() with 750+ UUIDs blows the PostgREST URL-length limit and fails
+        // silently — the mustaqil list never showed scores because of that.
+        const { data: evaluations, error: evaluationError } = await supabase
+          .from("monitoring_evaluations")
+          .select("izlanuvchi_id, monitoring_period, total_score, created_at")
+          .not("izlanuvchi_id", "is", null);
+
+        if (evaluationError) {
+          setMonitoringByIzlanuvchi({});
+          return;
+        }
+
+        const grouped = new Map<string, { monitoring_period: string; total_score: number; created_at: string }[]>();
+        (evaluations ?? []).forEach((evaluation) => {
+          const list = grouped.get(evaluation.izlanuvchi_id as string) ?? [];
+          list.push(evaluation);
+          grouped.set(evaluation.izlanuvchi_id as string, list);
+        });
+
+        const nextMonitoring: Record<string, HalfYearScores> = {};
+        grouped.forEach((list, izlanuvchiId) => {
+          nextMonitoring[izlanuvchiId] = latestHalfYearScores(list);
+        });
+        setMonitoringByIzlanuvchi(nextMonitoring);
+      } else {
+        setMonitoringByIzlanuvchi({});
+      }
     },
     [supabase, turi, user]
   );
@@ -330,6 +399,7 @@ export function IzlanuvchilarTable({
         "#",
         "DOKTORANT",
         "TA'LIM SHAKLI",
+        "QABUL YILI",
         "IXTISOSLIK",
         "KAFEDRA",
         "TA'LIM TILI",
@@ -337,15 +407,19 @@ export function IzlanuvchilarTable({
         "ILMIY RAHBAR",
         "TELEFON RAQAMI",
         "PINFL",
+        "1-YARIM YILLIK",
+        "2-YARIM YILLIK",
         "HOLAT",
         "HIMOYA HOLATI",
       ];
       worksheet.addRow(headers);
       filtered.forEach((row, index) => {
+        const monitoring = monitoringByIzlanuvchi[row.id];
         worksheet.addRow([
           importedSourceNo(row) ?? index + 1,
           row.full_name,
           row.education_stage ?? "",
+          row.admission_year ?? "",
           row.specialty_code ?? "",
           departmentName(row) ?? "",
           row.talim_tili ?? "",
@@ -353,6 +427,8 @@ export function IzlanuvchilarTable({
           row.supervisor_name ?? "",
           row.phone ?? "",
           row.pinfl ?? "",
+          monitoring?.h1 != null ? `${monitoring.h1} / 100` : "",
+          monitoring?.h2 != null ? `${monitoring.h2} / 100` : "",
           row.status ?? "",
           row.himoya_holati ?? "",
         ]);
@@ -367,9 +443,9 @@ export function IzlanuvchilarTable({
       };
       header.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
       worksheet.views = [{ state: "frozen", ySplit: 1 }];
-      worksheet.autoFilter = { from: "A1", to: "L1" };
+      worksheet.autoFilter = { from: "A1", to: "O1" };
       worksheet.columns.forEach((column, index) => {
-        column.width = [7, 34, 28, 18, 30, 18, 14, 30, 20, 18, 34, 22][index];
+        column.width = [7, 34, 28, 14, 18, 30, 18, 14, 30, 20, 18, 16, 16, 34, 22][index];
       });
 
       const buffer = await workbook.xlsx.writeBuffer();
@@ -664,7 +740,7 @@ export function IzlanuvchilarTable({
               {rows.length ? "Qidiruv yoki filtr bo'yicha natija topilmadi." : "Hozircha yozuv mavjud emas."}
             </div>
           ) : (
-            <table className="w-full min-w-[1200px]">
+            <table className="w-full min-w-[1400px]">
               <thead className="bg-surface-50 dark:bg-surface-900/60">
                 <tr className="border-b border-surface-200 dark:border-surface-700">
                   {[
@@ -675,6 +751,8 @@ export function IzlanuvchilarTable({
                     "KAFEDRA",
                     "ILMIY RAHBAR",
                     "PINFL",
+                    "1-YARIM YILLIK",
+                    "2-YARIM YILLIK",
                     "HOLAT",
                     "HARAKATLAR",
                   ].map((heading) => (
@@ -720,6 +798,32 @@ export function IzlanuvchilarTable({
                     </td>
                     <td className="whitespace-nowrap px-3 py-3 font-mono text-xs text-surface-600 dark:text-surface-300">
                       {row.pinfl ?? "—"}
+                    </td>
+                    <td className="px-3 py-3">
+                      {monitoringByIzlanuvchi[row.id]?.h1 != null ? (
+                        <span
+                          className={`inline-flex rounded-full px-2.5 py-1 text-xs font-bold ${scoreClass(
+                            monitoringByIzlanuvchi[row.id].h1 as number
+                          )}`}
+                        >
+                          {monitoringByIzlanuvchi[row.id].h1} / 100
+                        </span>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
+                    <td className="px-3 py-3">
+                      {monitoringByIzlanuvchi[row.id]?.h2 != null ? (
+                        <span
+                          className={`inline-flex rounded-full px-2.5 py-1 text-xs font-bold ${scoreClass(
+                            monitoringByIzlanuvchi[row.id].h2 as number
+                          )}`}
+                        >
+                          {monitoringByIzlanuvchi[row.id].h2} / 100
+                        </span>
+                      ) : (
+                        "—"
+                      )}
                     </td>
                     <td className="max-w-[15rem] px-3 py-3">
                       {row.status ? (
