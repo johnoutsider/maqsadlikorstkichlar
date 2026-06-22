@@ -7,16 +7,26 @@ import { Button } from "@/components/ui/Button";
 import type {
   Indicator,
   Submission,
+  SubmissionStatus,
   Quarter,
   IndicatorSubmission,
   AppUser,
+  Faculty,
+  Department,
+  SubmissionDeadline,
 } from "@/types/db";
+import { DeadlineCountdown } from "@/components/DeadlineCountdown";
 import {
   STATUS_LABEL,
   isIndicatorEditable,
   clearRejectedReviews,
 } from "@/lib/workflow";
 import { buildReviewSummaryEntries, normalizeSubmission } from "@/lib/submission";
+import {
+  calculatePercentageValue,
+  formatCalculatedValue,
+  isPercentageCalculationConfig,
+} from "@/lib/indicator-calculation";
 import {
   acceptAttribute,
   safeStorageFileName,
@@ -50,6 +60,8 @@ export default function FormPage() {
 
   const { user } = useSupabaseAuth();
 
+  const [faculty, setFaculty] = useState<Faculty | null>(null);
+  const [department, setDepartment] = useState<Department | null>(null);
   const [year, setYear] = useState<number>(new Date().getFullYear());
   const [quarter, setQuarter] = useState<Quarter>(currentQuarter());
   const [periodInit, setPeriodInit] = useState(false);
@@ -59,14 +71,31 @@ export default function FormPage() {
   const [submission, setSubmission] = useState<Submission | null>(null);
   const [target, setTarget] = useState<import("@/types/db").Target | null>(null);
   const [values, setValues] = useState<Record<string, string>>({});
+  const [calculationInputs, setCalculationInputs] = useState<Record<string, Record<string, string>>>({});
   const [files, setFiles] = useState<Record<string, string[]>>({});
   const [loading, setLoading] = useState(true);
-  const [busyAction, setBusyAction] = useState<"draft" | "submit" | null>(null);
+  const [busyAction, setBusyAction] = useState<"submit" | "save" | null>(null);
   const [uploadingFor, setUploadingFor] = useState<string | null>(null);
   const [uploadErrors, setUploadErrors] = useState<Record<string, string>>({});
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [reviewerMap, setReviewerMap] = useState<Map<string, string>>(new Map());
+  const [deadline, setDeadline] = useState<SubmissionDeadline | null>(null);
+
+  // Auto-save: every value edit / file change is persisted automatically, so
+  // there is no manual "save draft" button. Refs mirror the latest values/files
+  // so the debounced + post-upload saves never read stale closure state.
+  const [autoSaveState, setAutoSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const valuesRef = useRef<Record<string, string>>({});
+  const calculationInputsRef = useRef<Record<string, Record<string, string>>>({});
+  const filesRef = useRef<Record<string, string[]>>({});
+  const autoSavingRef = useRef(false);
+  const pendingSaveRef = useRef(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autoPersistRef = useRef<() => void>(() => {});
+  // Pause auto-save while a manual submit is in flight so a late save can't
+  // overwrite the just-submitted status back to draft.
+  const blockAutoSaveRef = useRef(false);
 
   useEffect(() => {
     if (!user?.university_id) return;
@@ -87,16 +116,30 @@ export default function FormPage() {
     })();
   }, [user?.university_id, supabase]);
 
+  useEffect(() => {
+    if (!user?.faculty_id) return;
+    (async () => {
+      const [fRes, dRes] = await Promise.all([
+        supabase.from("faculties").select("*").eq("id", user.faculty_id!).maybeSingle(),
+        user.department_id
+          ? supabase.from("departments").select("*").eq("id", user.department_id).maybeSingle()
+          : Promise.resolve({ data: null }),
+      ]);
+      setFaculty((fRes.data as Faculty) ?? null);
+      setDepartment((dRes.data as Department) ?? null);
+    })();
+  }, [user?.faculty_id, user?.department_id, supabase]);
+
   // On first load, if the staff has a submission needing attention
   // (needs_revision > rejected > any most recent), jump to that period
   // so they aren't staring at a blank current-quarter form.
   useEffect(() => {
-    if (periodInit || !user?.department_id) return;
+    if (periodInit || !user?.id) return;
     (async () => {
       const { data } = await supabase
         .from("submissions")
         .select("year, quarter, status, updated_at")
-        .eq("department_id", user.department_id)
+        .eq("submitted_by", user.id)
         .order("updated_at", { ascending: false });
       const rows = (data as { year: number; quarter: Quarter; status: string }[]) ?? [];
       const priority =
@@ -109,18 +152,18 @@ export default function FormPage() {
       }
       setPeriodInit(true);
     })();
-  }, [user?.department_id, periodInit, supabase]);
+  }, [user?.id, periodInit, supabase]);
 
   const load = useCallback(async () => {
-    if (!user?.department_id) return;
+    if (!user?.id || !user?.department_id) return;
     setLoading(true);
     setError("");
     setMessage("");
-    const [subRes, tgtRes] = await Promise.all([
+    const [subRes, tgtRes, dlRes] = await Promise.all([
       supabase
         .from("submissions")
         .select("*")
-        .eq("department_id", user.department_id)
+        .eq("submitted_by", user.id)
         .eq("year", year)
         .eq("quarter", quarter)
         .maybeSingle(),
@@ -130,7 +173,15 @@ export default function FormPage() {
         .eq("department_id", user.department_id)
         .eq("year", year)
         .eq("quarter", quarter)
-        .maybeSingle()
+        .maybeSingle(),
+      supabase
+        .from("submission_deadlines")
+        .select("*")
+        .eq("university_id", user.university_id!)
+        .eq("year", year)
+        .eq("quarter", quarter)
+        .eq("is_active", true)
+        .maybeSingle(),
     ]);
 
     if (subRes.error) setError(subRes.error.message);
@@ -160,17 +211,50 @@ export default function FormPage() {
     const tgt = (tgtRes.data as import("@/types/db").Target) ?? null;
     setTarget(tgt);
 
+    // Deadline: "specific" qamrovda foydalanuvchi ro'yxatda borligini tekshirish
+    const dlRaw = (dlRes.data as SubmissionDeadline) ?? null;
+    if (dlRaw && dlRaw.applies_to === "specific") {
+      const { data: dlUser } = await supabase
+        .from("submission_deadline_users")
+        .select("user_id")
+        .eq("deadline_id", dlRaw.id)
+        .eq("user_id", user.id)
+        .maybeSingle();
+      setDeadline(dlUser ? dlRaw : null);
+    } else {
+      setDeadline(dlRaw);
+    }
+
     const v: Record<string, string> = {};
+    const calc: Record<string, Record<string, string>> = {};
     const f: Record<string, string[]> = {};
     indicators.forEach((ind) => {
       const cell: IndicatorSubmission | undefined = sub?.indicators?.[ind.id];
       v[ind.id] = cell?.value === null || cell?.value === undefined ? "" : String(cell.value);
+      calc[ind.id] = {};
+      const config = isPercentageCalculationConfig(ind.calculation_config)
+        ? ind.calculation_config
+        : null;
+      if (config) {
+        const inputValues = cell?.calculation_inputs ?? {};
+        const fields = [config.denominator, ...config.numerators];
+        fields.forEach((field) => {
+          const value = inputValues[field.key];
+          calc[ind.id][field.key] = value === null || value === undefined ? "" : String(value);
+        });
+      }
       f[ind.id] = cell?.files ?? [];
     });
+    valuesRef.current = v;
+    calculationInputsRef.current = calc;
+    filesRef.current = f;
     setValues(v);
+    setCalculationInputs(calc);
     setFiles(f);
+    setAutoSaveState("idle");
+    blockAutoSaveRef.current = false;
     setLoading(false);
-  }, [user?.department_id, year, quarter, indicators, supabase]);
+  }, [user?.id, user?.department_id, user?.university_id, year, quarter, indicators, supabase]);
 
   useEffect(() => {
     if (indicators.length > 0) load();
@@ -178,9 +262,14 @@ export default function FormPage() {
 
   const status = submission?.status ?? "draft";
   const reviews = submission?.indicator_reviews ?? {};
+
+  // Deadline lock: muddat o'tganmi va bu userage tegishlimi?
+  const deadlinePassed = deadline !== null && new Date(deadline.deadline_at).getTime() < Date.now();
+
   // Form-level lock: fully locked (no edits, no submit button) when waiting
-  // for a reviewer or already approved.
+  // for a reviewer or already approved, OR when deadline has passed.
   const formLocked =
+    deadlinePassed ||
     status === "pending_dean" ||
     status === "pending" ||
     status === "pending_science" ||
@@ -208,8 +297,15 @@ export default function FormPage() {
     reviewerMap
   );
 
-  const buildPayload = (newStatus: "draft" | "pending_dean") => {
+  // Build the row to upsert. `lenient` (used by auto-save) keeps a previously
+  // saved value instead of erroring on a half-typed/invalid number, so an
+  // in-progress edit never blocks an auto-save. Reads from refs so debounced
+  // and post-upload saves always see the freshest values/files.
+  const buildPayload = (newStatus: SubmissionStatus, opts?: { lenient?: boolean }) => {
     if (!user?.university_id || !user?.department_id || !user?.faculty_id) return null;
+    const curValues = valuesRef.current;
+    const curCalculationInputs = calculationInputsRef.current;
+    const curFiles = filesRef.current;
 
     // Start from the existing submission's indicators so we preserve locked
     // (already-approved) ones on a revision resubmit. Then overwrite each
@@ -220,17 +316,42 @@ export default function FormPage() {
     for (const ind of indicators) {
       const editable = indicatorEditable(ind.id) || status === "draft" || !submission;
       if (!editable) continue;
-      const raw = values[ind.id]?.trim();
+      const calculationConfig = isPercentageCalculationConfig(ind.calculation_config)
+        ? ind.calculation_config
+        : null;
+      if (calculationConfig) {
+        const rawInputs = curCalculationInputs[ind.id] ?? {};
+        const calculated = calculatePercentageValue(calculationConfig, rawInputs);
+        const calculationInputsObj: Record<string, number | null> = {};
+        [calculationConfig.denominator, ...calculationConfig.numerators].forEach((field) => {
+          const raw = rawInputs[field.key]?.trim();
+          const numeric = raw ? Number(raw) : null;
+          calculationInputsObj[field.key] =
+            typeof numeric === "number" && Number.isFinite(numeric) ? numeric : null;
+        });
+        indicatorsObj[ind.id] = {
+          value: calculated ?? submission?.indicators?.[ind.id]?.value ?? null,
+          files: curFiles[ind.id] ?? [],
+          calculation_inputs: calculationInputsObj,
+        };
+        continue;
+      }
+      const raw = curValues[ind.id]?.trim();
       let value: number | null = null;
       if (raw) {
         const n = Number(raw);
         if (Number.isNaN(n)) {
+          if (opts?.lenient) {
+            value = submission?.indicators?.[ind.id]?.value ?? null;
+          } else {
           setError(`"${ind.no}. ${ind.name}" — son kiriting yoki bo'sh qoldiring.`);
-          return null;
+            return null;
+          }
+        } else {
+          value = n;
         }
-        value = n;
       }
-      indicatorsObj[ind.id] = { value, files: files[ind.id] ?? [] };
+      indicatorsObj[ind.id] = { value, files: curFiles[ind.id] ?? [] };
     }
 
     // On resubmit from a revision state, clear review decisions for indicators
@@ -255,23 +376,53 @@ export default function FormPage() {
     };
   };
 
-  const persist = async (newStatus: "draft" | "pending_dean") => {
+  const persist = async (newStatus: "pending_dean") => {
     setError("");
     setMessage("");
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    blockAutoSaveRef.current = true;
+
+    // Validate: if files are uploaded for an indicator, a numeric value is required.
+    for (const ind of indicators) {
+      const editable = indicatorEditable(ind.id) || status === "draft" || !submission;
+      if (!editable) continue;
+      const uploadedCount = (filesRef.current[ind.id] ?? []).length;
+      const hasFiles = uploadedCount > 0;
+      // Fayl yuklash talabi (min_files) majburiy emas — faqat ko'rsatkich sifatida
+      // ko'rsatiladi (badge), submission'ni bloklamaydi.
+      const calculationConfig = isPercentageCalculationConfig(ind.calculation_config)
+        ? ind.calculation_config
+        : null;
+      const calculatedValue = calculationConfig
+        ? calculatePercentageValue(calculationConfig, calculationInputsRef.current[ind.id] ?? {})
+        : null;
+      const hasStoredValue =
+        submission?.indicators?.[ind.id]?.value !== null &&
+        submission?.indicators?.[ind.id]?.value !== undefined;
+      const hasValue = calculationConfig
+        ? calculatedValue !== null || hasStoredValue
+        : (valuesRef.current[ind.id] ?? "").trim() !== "";
+      if (hasFiles && !hasValue) {
+        setError(`"${ind.no}. ${ind.name}" — fayl yuklangan, ammo raqam kiritilmagan. Iltimos, raqam kiriting.`);
+        blockAutoSaveRef.current = false;
+        return;
+      }
+    }
+
     const payload = buildPayload(newStatus);
-    if (!payload) return;
-    setBusyAction(newStatus === "pending_dean" ? "submit" : "draft");
+    if (!payload) { blockAutoSaveRef.current = false; return; }
+    setBusyAction("submit");
     const { error: e } = await supabase
       .from("submissions")
-      .upsert(payload, { onConflict: "department_id,year,quarter" });
+      .upsert(payload, { onConflict: "submitted_by,year,quarter" });
     setBusyAction(null);
-    if (e) { setError(e.message); return; }
+    if (e) { setError(e.message); blockAutoSaveRef.current = false; return; }
     if (newStatus === "pending_dean" && user?.university_id && user?.faculty_id) {
       const { notifyDeans } = await import("@/lib/notifications");
       const { data: sub } = await supabase
         .from("submissions")
         .select("id")
-        .eq("department_id", user.department_id!)
+        .eq("submitted_by", user.id)
         .eq("year", year)
         .eq("quarter", quarter)
         .maybeSingle();
@@ -291,6 +442,54 @@ export default function FormPage() {
     load();
   };
 
+  const saveDraft = async () => {
+    if (!user?.id) return;
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    setBusyAction("save");
+    const targetStatus: SubmissionStatus = isRevision ? status : "draft";
+    const payload = buildPayload(targetStatus, { lenient: true });
+    if (!payload) { setBusyAction(null); return; }
+    const { error: e } = await supabase
+      .from("submissions")
+      .upsert(payload, { onConflict: "submitted_by,year,quarter" });
+    setBusyAction(null);
+    if (e) { setError(e.message); return; }
+    setMessage("Qoralama saqlandi.");
+    load();
+  };
+
+  // ── Auto-save ────────────────────────────────────────────────────────────
+  // Persist the current form silently, keeping the current status (a brand-new
+  // form becomes a draft; a returned report stays needs_revision/rejected so
+  // the user can keep working and come back later). Never touches submitted_at
+  // or review decisions. Runs after every file change and (debounced) value
+  // edit, so there is no manual "save draft" button.
+  const autoPersist = async () => {
+    if (blockAutoSaveRef.current || formLocked || !user?.id) return;
+    if (autoSavingRef.current) { pendingSaveRef.current = true; return; }
+    autoSavingRef.current = true;
+    setAutoSaveState("saving");
+    const targetStatus: SubmissionStatus = isRevision ? status : "draft";
+    const payload = buildPayload(targetStatus, { lenient: true });
+    if (!payload) { autoSavingRef.current = false; setAutoSaveState("idle"); return; }
+    const { error: e } = await supabase
+      .from("submissions")
+      .upsert(payload, { onConflict: "submitted_by,year,quarter" });
+    autoSavingRef.current = false;
+    if (e) { setAutoSaveState("error"); return; }
+    setAutoSaveState("saved");
+    if (pendingSaveRef.current) { pendingSaveRef.current = false; void autoPersistRef.current(); }
+  };
+  autoPersistRef.current = autoPersist;
+
+  const scheduleAutoSave = () => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => { void autoPersistRef.current(); }, 800);
+  };
+
+  // Clear any pending debounce timer on unmount.
+  useEffect(() => () => { if (debounceRef.current) clearTimeout(debounceRef.current); }, []);
+
   const setUploadError = (indicatorId: string, msg: string) =>
     setUploadErrors((prev) => ({ ...prev, [indicatorId]: msg }));
   const clearUploadError = (indicatorId: string) =>
@@ -298,6 +497,7 @@ export default function FormPage() {
 
   const uploadFile = async (indicatorId: string, file: File) => {
     if (!user?.university_id || !user?.department_id) return;
+    if (deadlinePassed) { setError("Muddat tugagan — fayl yuklash mumkin emas."); return; }
     setError("");
     clearUploadError(indicatorId);
     const ind = indicators.find((i) => i.id === indicatorId);
@@ -327,17 +527,24 @@ export default function FormPage() {
     const { error: e } = await supabase.storage.from("submissions").upload(path, file);
     setUploadingFor(null);
     if (e) { setUploadError(indicatorId, e.message); return; }
-    setFiles((prev) => ({ ...prev, [indicatorId]: [...(prev[indicatorId] ?? []), path] }));
+    filesRef.current = {
+      ...filesRef.current,
+      [indicatorId]: [...(filesRef.current[indicatorId] ?? []), path],
+    };
+    setFiles({ ...filesRef.current });
+    void autoPersistRef.current();
   };
 
   const removeFile = async (indicatorId: string, path: string) => {
     if (!confirm("Faylni o'chirishni tasdiqlaysizmi?")) return;
     const { error: e } = await supabase.storage.from("submissions").remove([path]);
     if (e) { setError(e.message); return; }
-    setFiles((prev) => ({
-      ...prev,
-      [indicatorId]: (prev[indicatorId] ?? []).filter((p) => p !== path),
-    }));
+    filesRef.current = {
+      ...filesRef.current,
+      [indicatorId]: (filesRef.current[indicatorId] ?? []).filter((p) => p !== path),
+    };
+    setFiles({ ...filesRef.current });
+    void autoPersistRef.current();
   };
 
   const openFile = async (path: string) => {
@@ -371,7 +578,35 @@ export default function FormPage() {
       </div>
 
       <div className="bg-white dark:bg-surface-800 rounded-lg border border-surface-200 dark:border-surface-700 p-4 mb-4">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+          <div>
+            <label className="block text-xs font-medium text-surface-600 dark:text-surface-400 mb-1">Fakultet</label>
+            <select
+              disabled
+              value={faculty?.id ?? ""}
+              className="w-full rounded-md border border-surface-300 dark:border-surface-600 bg-surface-50 dark:bg-surface-900 px-3 py-2 text-sm opacity-75 cursor-not-allowed"
+            >
+              {faculty ? (
+                <option value={faculty.id}>{faculty.short_code} — {faculty.name}</option>
+              ) : (
+                <option value="">—</option>
+              )}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-surface-600 dark:text-surface-400 mb-1">Kafedra</label>
+            <select
+              disabled
+              value={department?.id ?? ""}
+              className="w-full rounded-md border border-surface-300 dark:border-surface-600 bg-surface-50 dark:bg-surface-900 px-3 py-2 text-sm opacity-75 cursor-not-allowed"
+            >
+              {department ? (
+                <option value={department.id}>{department.short_code} — {department.name}</option>
+              ) : (
+                <option value="">—</option>
+              )}
+            </select>
+          </div>
           <div>
             <label className="block text-xs font-medium text-surface-600 dark:text-surface-400 mb-1">Yil</label>
             <input
@@ -396,6 +631,16 @@ export default function FormPage() {
         </div>
       </div>
 
+      {/* Deadline countdown banner */}
+      {!loading && deadline && (
+        <div className="mb-4">
+          <DeadlineCountdown
+            deadlineAt={deadline.deadline_at}
+            label={`${year} ${quarter} hisoboti uchun muddat`}
+          />
+        </div>
+      )}
+
       {error && <div className="mb-4 p-3 bg-danger-50 dark:bg-danger-900/30 text-danger-600 dark:text-danger-400 rounded-lg text-sm">{error}</div>}
       {message && <div className="mb-4 p-3 bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-lg text-sm">{message}</div>}
       {!loading && !target && indicators.length > 0 && (
@@ -419,7 +664,7 @@ export default function FormPage() {
           <strong>Umumiy izoh:</strong> {submission.review_comment}
         </div>
       )}
-      {formLocked && (
+      {formLocked && !deadlinePassed && (
         <div className="mb-4 p-3 bg-surface-100 dark:bg-surface-800 text-surface-600 dark:text-surface-400 rounded-lg text-sm">
           Hisobot {STATUS_LABEL[status].text.toLowerCase()}. Tahrirlash mumkin emas.
         </div>
@@ -447,14 +692,27 @@ export default function FormPage() {
               {indicators.map((ind) => {
                 const f = files[ind.id] ?? [];
                 const fileRule = submissionFileRule(ind.allowed_file_extensions);
+                const minFiles = ind.min_files ?? 0;
+                const fileRequirementMet = f.length >= minFiles;
                 const maqsad = target?.values?.[ind.id] ?? null;
+                const calculationConfig = isPercentageCalculationConfig(ind.calculation_config)
+                  ? ind.calculation_config
+                  : null;
+                const calculatedValue = calculationConfig
+                  ? calculatePercentageValue(calculationConfig, calculationInputs[ind.id] ?? {})
+                  : null;
+                const displayedValue = calculationConfig
+                  ? calculatedValue !== null ? formatCalculatedValue(calculatedValue) : ""
+                  : values[ind.id] ?? "";
                 const parseNum = (v: string) => { const n = Number(v); return isNaN(n) ? 0 : n; };
-                const qiymat = values[ind.id] ? parseNum(values[ind.id]) : null;
-                let foiz = "—";
-                if (typeof maqsad === "number" && maqsad > 0 && typeof qiymat === "number") {
+                const qiymat = calculationConfig
+                  ? calculatedValue ?? (values[ind.id] ? parseNum(values[ind.id]) : null)
+                  : values[ind.id] ? parseNum(values[ind.id]) : null;
+                let foiz = "—";
+                if (!calculationConfig && typeof maqsad === "number" && maqsad > 0 && typeof qiymat === "number") {
                    const p = (qiymat / maqsad) * 100;
                    foiz = (p > 100 ? 100 : p).toFixed(1) + "%";
-                } else if (typeof maqsad === "number" && maqsad === 0 && typeof qiymat === "number" && qiymat >= 0) {
+                } else if (!calculationConfig && typeof maqsad === "number" && maqsad === 0 && typeof qiymat === "number" && qiymat >= 0) {
                    foiz = "100.0%";
                 }
 
@@ -470,9 +728,62 @@ export default function FormPage() {
                     <td className="px-4 py-3 text-sm font-mono">{ind.no}</td>
                     <td className={`px-4 py-3 text-sm ${ind.is_sub_indicator ? "pl-8 text-surface-600" : ""}`}>
                       {ind.name}
+                      {ind.description && (
+                        <div className="mt-2 rounded-md border border-blue-100 dark:border-blue-900/50 bg-blue-50/70 dark:bg-blue-900/10 px-3 py-2 text-sm leading-relaxed text-blue-800 dark:text-blue-200">
+                          <span className="font-semibold">Izoh:</span> {ind.description}
+                        </div>
+                      )}
                       {rej && (
                         <div className="mt-1 text-xs text-danger-700 dark:text-danger-400">
                           <strong>{rej.stage} rad etdi:</strong> {rej.comment || "(izohsiz)"}
+                        </div>
+                      )}
+                      {calculationConfig && (
+                        <div className="mt-3 rounded-md border border-blue-100 dark:border-blue-900/50 bg-blue-50/50 dark:bg-blue-900/10 p-3">
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            {[calculationConfig.denominator, ...calculationConfig.numerators].map((field) => (
+                              <label key={field.key} className="text-xs text-surface-500 dark:text-surface-400">
+                                <span className="block mb-1 leading-tight">{field.label}</span>
+                                <input
+                                  type="number"
+                                  step="any"
+                                  value={calculationInputs[ind.id]?.[field.key] ?? ""}
+                                  onChange={(e) => {
+                                    const next = e.target.value;
+                                    const nextForIndicator = {
+                                      ...(calculationInputsRef.current[ind.id] ?? {}),
+                                      [field.key]: next,
+                                    };
+                                    const nextAll = {
+                                      ...calculationInputsRef.current,
+                                      [ind.id]: nextForIndicator,
+                                    };
+                                    const nextCalculated = calculatePercentageValue(
+                                      calculationConfig,
+                                      nextForIndicator
+                                    );
+                                    calculationInputsRef.current = nextAll;
+                                    setCalculationInputs(nextAll);
+                                    if (nextCalculated !== null) {
+                                      const formatted = formatCalculatedValue(nextCalculated);
+                                      valuesRef.current = { ...valuesRef.current, [ind.id]: formatted };
+                                      setValues((current) => ({ ...current, [ind.id]: formatted }));
+                                    } else {
+                                      valuesRef.current = { ...valuesRef.current, [ind.id]: "" };
+                                      setValues((current) => ({ ...current, [ind.id]: "" }));
+                                    }
+                                    scheduleAutoSave();
+                                  }}
+                                  onBlur={() => {
+                                    if (debounceRef.current) clearTimeout(debounceRef.current);
+                                    void autoPersistRef.current();
+                                  }}
+                                  disabled={!editable}
+                                  className="w-full rounded-md border border-surface-300 dark:border-surface-600 bg-white dark:bg-surface-800 px-2 py-1.5 text-sm disabled:opacity-60"
+                                />
+                              </label>
+                            ))}
+                          </div>
                         </div>
                       )}
                     </td>
@@ -481,14 +792,40 @@ export default function FormPage() {
                       {maqsad !== null ? maqsad : <span className="text-surface-400">—</span>}
                     </td>
                     <td className="px-4 py-3">
-                      <input
-                        type="number"
-                        step="any"
-                        value={values[ind.id] ?? ""}
-                        onChange={(e) => setValues((p) => ({ ...p, [ind.id]: e.target.value }))}
-                        disabled={!editable}
-                        className="w-full rounded-md border border-surface-300 dark:border-surface-600 bg-white dark:bg-surface-800 px-2 py-1.5 text-sm disabled:opacity-60"
-                      />
+                      <div className="relative">
+                        <input
+                          type={calculationConfig ? "text" : "number"}
+                          step="any"
+                          value={calculationConfig ? displayedValue : values[ind.id] ?? ""}
+                          onChange={(e) => {
+                            if (calculationConfig) return;
+                            const next = e.target.value;
+                            valuesRef.current = { ...valuesRef.current, [ind.id]: next };
+                            setValues((p) => ({ ...p, [ind.id]: next }));
+                            scheduleAutoSave();
+                          }}
+                          onBlur={() => {
+                            if (debounceRef.current) clearTimeout(debounceRef.current);
+                            void autoPersistRef.current();
+                          }}
+                          disabled={!editable || !!calculationConfig}
+                          className={`w-full rounded-md border px-2 py-1.5 text-sm disabled:opacity-60 ${
+                            (!calculationConfig && f.length > 0 && !(values[ind.id] ?? "").trim())
+                              ? "border-amber-400 dark:border-amber-500 bg-amber-50 dark:bg-amber-900/20"
+                              : calculationConfig
+                                ? "border-surface-300 dark:border-surface-600 bg-surface-50 dark:bg-surface-900 text-center font-medium"
+                                : "border-surface-300 dark:border-surface-600 bg-white dark:bg-surface-800"
+                          }`}
+                        />
+                        {editable && !calculationConfig && f.length > 0 && !(values[ind.id] ?? "").trim() && (
+                          <span
+                            title="Fayl yuklangan — raqam kiriting"
+                            className="absolute right-1.5 top-1/2 -translate-y-1/2 text-amber-500 text-xs leading-none pointer-events-none"
+                          >
+                            ⚠
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-4 py-3 text-sm font-medium text-surface-900 dark:text-surface-100">
                       {foiz}
@@ -520,6 +857,17 @@ export default function FormPage() {
                         {(ind.min_pages !== null || ind.max_pages !== null) && (
                           <div className="text-[10px] text-surface-400 dark:text-surface-500">
                             PDF: {ind.min_pages ?? 1}–{ind.max_pages ?? "∞"} bet
+                          </div>
+                        )}
+                        {minFiles > 0 && (
+                          <div
+                            className={`text-[10px] font-medium rounded-md px-2 py-1 border ${
+                              fileRequirementMet
+                                ? "bg-green-50 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-300 dark:border-green-800"
+                                : "bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-900/20 dark:text-amber-300 dark:border-amber-800"
+                            }`}
+                          >
+                            Yuklangan: {f.length} / {minFiles}
                           </div>
                         )}
                         {editable && (
@@ -587,10 +935,23 @@ export default function FormPage() {
       )}
 
       {!formLocked && indicators.length > 0 && (
-        <div className="mt-4 flex items-center justify-end gap-2">
-          {!isRevision && (
-            <Button variant="outline" onClick={() => persist("draft")} isLoading={busyAction === "draft"}>
-              Qoralamani saqlash
+        <div className="mt-4 flex items-center justify-end gap-3">
+          <span className="text-xs text-surface-500 dark:text-surface-400" aria-live="polite">
+            {autoSaveState === "saving" && "Saqlanmoqda…"}
+            {autoSaveState === "saved" && "Avtomatik saqlandi ✓"}
+            {autoSaveState === "error" && (
+              <span className="text-danger-600 dark:text-danger-400">
+                Saqlanmadi — internet aloqasini tekshiring
+              </span>
+            )}
+          </span>
+          {busyAction !== "submit" && (
+            <Button
+              variant="outline"
+              onClick={saveDraft}
+              isLoading={busyAction === "save"}
+            >
+              Qoralama saqlash
             </Button>
           )}
           <Button onClick={() => persist("pending_dean")} isLoading={busyAction === "submit"}>

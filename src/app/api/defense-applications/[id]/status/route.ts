@@ -18,7 +18,7 @@ export async function GET(_request: Request, context: RouteContext) {
   const { data: application, error } = await admin
     .from("defense_applications")
     .select(
-      "id, reference_code, status, phone_verified, applicant_full_name, applicant_phone, dissertation_info, avtoreferat_info, documents, science_comment, vice_rector_comment"
+      "id, reference_code, status, phone_verified, applicant_full_name, applicant_phone, department_id, dissertation_info, avtoreferat_info, documents, science_comment, vice_rector_comment"
     )
     .eq("id", id)
     .maybeSingle();

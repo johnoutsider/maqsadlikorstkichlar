@@ -18,6 +18,8 @@ interface Row {
   faculty_id: string | null;
   department_id: string | null;
   role_name: RoleName;
+  roles: RoleName[];
+  primary_role: RoleName;
 }
 
 const ROLE_LABEL: Record<string, string> = {
@@ -27,6 +29,7 @@ const ROLE_LABEL: Record<string, string> = {
   dean: "Dekan",
   staff_manager: "Kafedra mudiri",
   oquv_bolimi: "O'quv bo'limi",
+  monitor: "Nazoratchi",
   supervisor: "Ilmiy rahbar",
   doktorant: "Doktorant",
 };
@@ -38,7 +41,11 @@ const ALL_ASSIGNABLE_ROLES: RoleName[] = [
   "dean",
   "staff_manager",
   "oquv_bolimi",
+  "monitor",
 ];
+
+type SortKey = "display_name" | "email" | "primary_role" | "assigned";
+type SortDir = "asc" | "desc";
 
 export default function UsersPage() {
   const supabase = createClient();
@@ -49,13 +56,18 @@ export default function UsersPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
+  const [filterFacultyId, setFilterFacultyId] = useState("");
+  const [sortKey, setSortKey] = useState<SortKey>("display_name");
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
+
   const [modalOpen, setModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<Row | null>(null);
   const [displayName, setDisplayName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
-  const [role, setRole] = useState<RoleName>("staff_manager");
+  const [roles, setRoles] = useState<RoleName[]>(["staff_manager"]);
+  const [primaryRole, setPrimaryRole] = useState<RoleName | "">("staff_manager");
   const [facultyId, setFacultyId] = useState("");
   const [departmentId, setDepartmentId] = useState("");
   const [saving, setSaving] = useState(false);
@@ -77,7 +89,9 @@ export default function UsersPage() {
     const [u, f, d] = await Promise.all([
       supabase
         .from("users")
-        .select("id, display_name, email, phone, role_id, faculty_id, department_id, roles!inner(name)")
+        .select(
+          "id, display_name, email, phone, role_id, faculty_id, department_id, roles!users_role_id_fkey!inner(name), user_roles(is_primary, granted_role:roles(name))"
+        )
         .eq("university_id", user.university_id),
       supabase.from("faculties").select("*").eq("university_id", user.university_id).order("short_code"),
       supabase.from("departments").select("*").eq("university_id", user.university_id).order("short_code"),
@@ -87,16 +101,23 @@ export default function UsersPage() {
       setError(u.error.message);
     } else {
       setRows(
-        ((u.data as any[]) ?? []).map((r) => ({
-          id: r.id,
-          display_name: r.display_name,
-          email: r.email,
-          phone: r.phone,
-          role_id: r.role_id,
-          faculty_id: r.faculty_id,
-          department_id: r.department_id,
-          role_name: r.roles.name,
-        }))
+        ((u.data as any[]) ?? []).map((r) => {
+          const grants = (r.user_roles as any[]) ?? [];
+          const grantedRoles: RoleName[] = grants.map((g) => g.granted_role.name);
+          const primary = grants.find((g) => g.is_primary)?.granted_role.name ?? r.roles.name;
+          return {
+            id: r.id,
+            display_name: r.display_name,
+            email: r.email,
+            phone: r.phone,
+            role_id: r.role_id,
+            faculty_id: r.faculty_id,
+            department_id: r.department_id,
+            role_name: r.roles.name,
+            roles: grantedRoles.length > 0 ? grantedRoles : [r.roles.name],
+            primary_role: primary,
+          };
+        })
       );
     }
 
@@ -132,13 +153,42 @@ export default function UsersPage() {
     [depById, facById]
   );
 
+  const toggleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir("asc");
+    }
+  };
+
+  const filteredAndSorted = useMemo(() => {
+    let result = rows;
+
+    if (filterFacultyId) {
+      result = result.filter((r) => r.faculty_id === filterFacultyId);
+    }
+
+    return [...result].sort((a, b) => {
+      let va = "";
+      let vb = "";
+      if (sortKey === "display_name") { va = a.display_name; vb = b.display_name; }
+      else if (sortKey === "email") { va = a.email; vb = b.email; }
+      else if (sortKey === "primary_role") { va = ROLE_LABEL[a.primary_role] ?? a.primary_role; vb = ROLE_LABEL[b.primary_role] ?? b.primary_role; }
+      else if (sortKey === "assigned") { va = assignedName(a); vb = assignedName(b); }
+      const cmp = va.localeCompare(vb, "uz", { sensitivity: "base" });
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+  }, [rows, filterFacultyId, sortKey, sortDir, assignedName]);
+
   const openCreate = () => {
     setEditingUser(null);
     setDisplayName("");
     setEmail("");
     setPhone("");
     setPassword("");
-    setRole("staff_manager");
+    setRoles(["staff_manager"]);
+    setPrimaryRole("staff_manager");
     setFacultyId("");
     setDepartmentId("");
     setFormError("");
@@ -151,11 +201,26 @@ export default function UsersPage() {
     setEmail(r.email);
     setPhone(r.phone ?? "");
     setPassword("");
-    setRole(r.role_name);
+    setRoles(r.roles);
+    setPrimaryRole(r.primary_role);
     setFacultyId(r.faculty_id ?? "");
     setDepartmentId(r.department_id ?? "");
     setFormError("");
     setModalOpen(true);
+  };
+
+  const toggleRole = (roleName: RoleName) => {
+    setRoles((prev) => {
+      const next = prev.includes(roleName)
+        ? prev.filter((r) => r !== roleName)
+        : [...prev, roleName];
+      setPrimaryRole((prevPrimary) =>
+        next.includes(prevPrimary as RoleName) ? prevPrimary : next[0] ?? ""
+      );
+      if (!next.includes("dean") && !next.includes("staff_manager")) setFacultyId("");
+      if (!next.includes("staff_manager")) setDepartmentId("");
+      return next;
+    });
   };
 
   const save = async (e: React.FormEvent) => {
@@ -172,12 +237,22 @@ export default function UsersPage() {
       return;
     }
 
-    if (role === "dean" && !facultyId) {
-      setFormError("Dekan uchun fakultet tanlang.");
+    if (roles.length === 0) {
+      setFormError("Kamida bir rol tanlang.");
       return;
     }
 
-    if (role === "staff_manager" && !departmentId) {
+    if (!primaryRole) {
+      setFormError("Asosiy rolni tanlang.");
+      return;
+    }
+
+    if ((roles.includes("dean") || roles.includes("staff_manager")) && !facultyId) {
+      setFormError("Dekan/kafedra mas'uli uchun fakultet tanlang.");
+      return;
+    }
+
+    if (roles.includes("staff_manager") && !departmentId) {
       setFormError("Kafedrani tanlash majburiy.");
       return;
     }
@@ -188,7 +263,8 @@ export default function UsersPage() {
       password: password || undefined,
       display_name: displayName.trim(),
       phone: phone.trim() || null,
-      role,
+      roles,
+      primary_role: primaryRole,
       faculty_id: facultyId || null,
       department_id: departmentId || null,
     };
@@ -208,6 +284,30 @@ export default function UsersPage() {
     setModalOpen(false);
     setEditingUser(null);
     load();
+  };
+
+  const [resettingId, setResettingId] = useState<string | null>(null);
+
+  const resetPassword = async (r: Row) => {
+    if (!confirm(`"${r.display_name}" foydalanuvchisining parolini "12345678" ga tiklaysizmi? Foydalanuvchi keyingi kirishda parolni o'zgartirishi shart bo'ladi.`)) {
+      return;
+    }
+
+    setResettingId(r.id);
+    const res = await fetch("/api/users/reset-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: r.id }),
+    });
+    setResettingId(null);
+
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      alert(data?.error ?? `HTTP ${res.status}`);
+      return;
+    }
+
+    alert(`Parol "12345678" ga tiklandi.`);
   };
 
   const remove = async (r: Row) => {
@@ -310,35 +410,106 @@ export default function UsersPage() {
         </div>
       )}
 
+      {!loading && faculties.length > 0 && (
+        <div className="mb-4 flex items-center gap-3">
+          <label className="text-sm font-medium text-surface-700 dark:text-surface-300 whitespace-nowrap">
+            Fakultet bo&apos;yicha:
+          </label>
+          <select
+            value={filterFacultyId}
+            onChange={(e) => setFilterFacultyId(e.target.value)}
+            className="rounded-md border border-surface-300 bg-white px-3 py-1.5 text-sm dark:border-surface-600 dark:bg-surface-800 dark:text-surface-100"
+          >
+            <option value="">Barchasi</option>
+            {faculties.map((f) => (
+              <option key={f.id} value={f.id}>
+                {f.short_code} — {f.name}
+              </option>
+            ))}
+          </select>
+          {filterFacultyId && (
+            <button
+              onClick={() => setFilterFacultyId("")}
+              className="text-sm text-surface-500 hover:text-surface-700 dark:hover:text-surface-300"
+            >
+              ✕ Tozalash
+            </button>
+          )}
+        </div>
+      )}
+
       <div className="overflow-hidden rounded-lg border border-surface-200 bg-white dark:border-surface-700 dark:bg-surface-800">
         {loading ? (
           <div className="p-8 text-center text-surface-500">Yuklanmoqda...</div>
-        ) : rows.length === 0 ? (
-          <div className="p-8 text-center text-surface-500">Hali foydalanuvchi qo&apos;shilmagan.</div>
+        ) : filteredAndSorted.length === 0 ? (
+          <div className="p-8 text-center text-surface-500">
+            {rows.length === 0 ? "Hali foydalanuvchi qoʻshilmagan." : "Tanlangan mezon boʻyicha natija topilmadi."}
+          </div>
         ) : (
           <table className="w-full">
             <thead className="border-b border-surface-200 bg-surface-50 dark:border-surface-700 dark:bg-surface-900/50">
               <tr>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-surface-600">Ism</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-surface-600">Email</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-surface-600">Rol</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-surface-600">Biriktirilgan</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-surface-600 w-10">#</th>
+                {(
+                  [
+                    { key: "display_name" as SortKey, label: "Ism" },
+                    { key: "email" as SortKey, label: "Email" },
+                    { key: "primary_role" as SortKey, label: "Rol" },
+                    { key: "assigned" as SortKey, label: "Biriktirilgan" },
+                  ] as { key: SortKey; label: string }[]
+                ).map(({ key, label }) => (
+                  <th
+                    key={key}
+                    onClick={() => toggleSort(key)}
+                    className="px-4 py-3 text-left text-xs font-semibold uppercase text-surface-600 cursor-pointer select-none hover:text-surface-900 dark:hover:text-surface-100"
+                  >
+                    <span className="inline-flex items-center gap-1">
+                      {label}
+                      <span className="text-surface-400">
+                        {sortKey === key ? (sortDir === "asc" ? "↑" : "↓") : "↕"}
+                      </span>
+                    </span>
+                  </th>
+                ))}
                 <th className="px-4 py-3" />
               </tr>
             </thead>
             <tbody className="divide-y divide-surface-200 dark:divide-surface-700">
-              {rows.map((r) => (
+              {filteredAndSorted.map((r, i) => (
                 <tr key={r.id} className="hover:bg-surface-50 dark:hover:bg-surface-900/30">
+                  <td className="px-4 py-3 text-sm text-surface-400 tabular-nums">{i + 1}</td>
                   <td className="px-4 py-3 text-sm">{r.display_name}</td>
                   <td className="px-4 py-3 font-mono text-sm text-surface-700 dark:text-surface-300">{r.email}</td>
-                  <td className="px-4 py-3 text-sm">{ROLE_LABEL[r.role_name] ?? r.role_name}</td>
+                  <td className="px-4 py-3 text-sm">
+                    {r.roles.map((roleName) => (
+                      <span key={roleName} className="mr-1 inline-block">
+                        {ROLE_LABEL[roleName] ?? roleName}
+                        {roleName === r.primary_role && r.roles.length > 1 && (
+                          <span className="text-xs text-surface-400"> (asosiy)</span>
+                        )}
+                        {r.roles[r.roles.length - 1] !== roleName && ","}
+                      </span>
+                    ))}
+                  </td>
                   <td className="px-4 py-3 text-sm text-surface-500">
                     {assignedName(r)}
                   </td>
                   <td className="px-4 py-3 text-right">
-                    <Button variant="outline" size="sm" onClick={() => openEdit(r)}>
-                      Tahrirlash
-                    </Button>
+                    <div className="flex items-center justify-end gap-2">
+                      {(user?.role === "science_department" || user?.role === "university_admin") && r.id !== user?.id && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          isLoading={resettingId === r.id}
+                          onClick={() => resetPassword(r)}
+                        >
+                          Parolni tiklash
+                        </Button>
+                      )}
+                      <Button variant="outline" size="sm" onClick={() => openEdit(r)}>
+                        Tahrirlash
+                      </Button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -421,25 +592,35 @@ export default function UsersPage() {
           />
 
           <div>
-            <label className="mb-1 block text-sm font-medium text-surface-700 dark:text-surface-300">Rol</label>
-            <select
-              value={role}
-              onChange={(e) => {
-                setRole(e.target.value as RoleName);
-                setFacultyId("");
-                setDepartmentId("");
-              }}
-              className="w-full rounded-md border border-surface-300 bg-white px-3 py-2 text-sm dark:border-surface-600 dark:bg-surface-800"
-            >
+            <label className="mb-1 block text-sm font-medium text-surface-700 dark:text-surface-300">Rollar</label>
+            <div className="space-y-1.5 rounded-md border border-surface-300 p-3 dark:border-surface-600">
               {ALL_ASSIGNABLE_ROLES.map((r) => (
-                <option key={r} value={r}>
-                  {ROLE_LABEL[r] ?? r}
-                </option>
+                <div key={r} className="flex items-center justify-between gap-2">
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={roles.includes(r)}
+                      onChange={() => toggleRole(r)}
+                    />
+                    {ROLE_LABEL[r] ?? r}
+                  </label>
+                  {roles.includes(r) && (
+                    <label className="flex items-center gap-1 text-xs text-surface-500">
+                      <input
+                        type="radio"
+                        name="primary_role"
+                        checked={primaryRole === r}
+                        onChange={() => setPrimaryRole(r)}
+                      />
+                      Asosiy
+                    </label>
+                  )}
+                </div>
               ))}
-            </select>
+            </div>
           </div>
 
-          {["dean", "staff_manager"].includes(role) && (
+          {(roles.includes("dean") || roles.includes("staff_manager")) && (
             <div>
               <label className="mb-1 block text-sm font-medium text-surface-700 dark:text-surface-300">Fakultet</label>
               <select
@@ -461,7 +642,7 @@ export default function UsersPage() {
             </div>
           )}
 
-          {role === "staff_manager" && facultyId && (
+          {roles.includes("staff_manager") && facultyId && (
             <div>
               <label className="mb-1 block text-sm font-medium text-surface-700 dark:text-surface-300">Kafedra</label>
               <select

@@ -13,6 +13,8 @@ function hrefFor(n: Notification): string | null {
     if (n.type === "submission_submitted") return `/submissions/${subId}`;
     if (n.type === "submission_approved" || n.type === "submission_rejected") return `/my-submissions`;
   }
+  const defenseAppId = (n.data as { defense_application_id?: string })?.defense_application_id;
+  if (defenseAppId) return `/himoya-arizalari/${defenseAppId}`;
   return null;
 }
 

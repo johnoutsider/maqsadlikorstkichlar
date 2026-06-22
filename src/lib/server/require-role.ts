@@ -2,6 +2,7 @@ import "server-only";
 
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { roleHome } from "@/lib/role-home";
 import type { RoleName } from "@/types/db";
 
 export async function requireRole(
@@ -19,13 +20,13 @@ export async function requireRole(
 
   const { data: profile } = await supabase
     .from("users")
-    .select("id, university_id, faculty_id, department_id, display_name, roles!inner(name)")
+    .select("id, university_id, faculty_id, department_id, display_name, roles!users_role_id_fkey!inner(name)")
     .eq("id", authUser.id)
     .maybeSingle();
 
   const role = ((profile as any)?.roles?.name ?? null) as RoleName | null;
   if (!profile || !role || !allowed.includes(role)) {
-    redirect(fallbackFor?.(role) ?? "/overview");
+    redirect(fallbackFor?.(role) ?? roleHome(role ?? undefined));
   }
 
   return { authUser, profile, role };

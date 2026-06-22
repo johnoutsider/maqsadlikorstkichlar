@@ -90,6 +90,11 @@ const NAV: NavItem[] = [
         label: "Ilmiy hisobotlar",
         roles: ["university_admin", "science_department", "vice_rector", "dean"],
       },
+      {
+        href: "/muddatlar",
+        label: "Hisobot muddatlari",
+        roles: ["university_admin", "science_department"],
+      },
     ],
   },
   // O'quv jarayoni — temporarily hidden
@@ -135,11 +140,21 @@ const NAV: NavItem[] = [
   {
     label: "Doktorantura",
     icon: <Icon d="M12 14l9-5-9-5-9 5 9 5zM12 14l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z" />,
-    roles: ["science_department", "supervisor", "doktorant"],
+    roles: ["science_department", "supervisor", "doktorant", "vice_rector"],
     children: [
       {
-        href: "/doktorantura",
-        label: "Doktorantlar",
+        href: "/monitoring-natijalari",
+        label: "Monitoring natijalari",
+        roles: ["science_department", "vice_rector"],
+      },
+      {
+        href: "/izlanuvchilar/doktorant",
+        label: "Doktorant va stajor-tadqiqotchilar",
+        roles: ["science_department"],
+      },
+      {
+        href: "/izlanuvchilar/mustaqil",
+        label: "Mustaqil izlanuvchilar",
         roles: ["science_department"],
       },
       {
@@ -180,10 +195,22 @@ const NAV: NavItem[] = [
     ]
   },
   {
+    href: "/nazoratchi/natijalar",
+    label: "Monitoring natijalari",
+    icon: <Icon d="M9 11l3 3L22 4M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11" />,
+    roles: ["monitor"],
+  },
+  {
+    href: "/nazoratchi/baholash",
+    label: "Monitoring baholash",
+    icon: <Icon d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />,
+    roles: ["monitor"],
+  },
+  {
     href: "/himoya-arizalari",
     label: "Himoya arizalari",
     icon: <Icon d="M9 12h6m-6 4h6m-7 5h8a2 2 0 002-2V7.414a1 1 0 00-.293-.707l-3.414-3.414A1 1 0 0013.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />,
-    roles: ["science_department", "vice_rector"],
+    roles: ["science_department", "vice_rector", "staff_manager"],
   },
   {
     href: "/universities",

@@ -24,6 +24,11 @@ import {
   deriveNextStatus,
 } from "@/lib/workflow";
 import { buildReviewSummaryEntries, normalizeSubmission } from "@/lib/submission";
+import {
+  getSubmissionScorePercent,
+  hasCalculatedValue,
+  isPercentageCalculationConfig,
+} from "@/lib/indicator-calculation";
 
 // What the reviewer is marking *right now* per indicator. "pending" = no
 // decision yet (blocks finalize).
@@ -51,6 +56,7 @@ export default function SubmissionDetailPage() {
   const [overallComment, setOverallComment] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [downloadingFor, setDownloadingFor] = useState<string | null>(null);
+  const [openingFileFor, setOpeningFileFor] = useState<string | null>(null);
 
   // Router is unused but kept for parity with prior file; silence lint.
   void router;
@@ -175,6 +181,19 @@ export default function SubmissionDetailPage() {
     } finally {
       setDownloadingFor(null);
     }
+  };
+
+  const openFileInNewTab = async (path: string, indicatorId: string) => {
+    setOpeningFileFor(indicatorId);
+    const { data, error: e } = await supabase.storage
+      .from("submissions")
+      .createSignedUrl(path, 60 * 10); // 10 minutes
+    setOpeningFileFor(null);
+    if (e || !data) {
+      setError(e?.message ?? "Faylni ochib bo'lmadi.");
+      return;
+    }
+    window.open(data.signedUrl, "_blank");
   };
 
   const finalize = async () => {
@@ -308,14 +327,10 @@ export default function SubmissionDetailPage() {
   let scoredItemsCount = 0;
   indicators.forEach(ind => {
     const maqsad = target?.values?.[ind.id] ?? null;
-    const qiymat = submission.indicators[ind.id]?.value ?? null;
-    if (typeof maqsad === "number" && typeof qiymat === "number") {
+    const score = getSubmissionScorePercent(maqsad, submission.indicators[ind.id]);
+    if (typeof score === "number") {
       scoredItemsCount++;
-      if (maqsad > 0) {
-        totalScore += Math.min((qiymat / maqsad) * 100, 100);
-      } else if (maqsad === 0 && qiymat >= 0) {
-        totalScore += 100;
-      }
+      totalScore += score;
     }
   });
   const overallScore = scoredItemsCount > 0 ? (totalScore / scoredItemsCount).toFixed(1) : "0.0";
@@ -383,9 +398,15 @@ export default function SubmissionDetailPage() {
               const cell: IndicatorSubmission | undefined = submission.indicators[ind.id];
               const tgtVal = target?.values?.[ind.id];
               const rev = submission.indicator_reviews?.[ind.id];
+              const minFiles = ind.min_files ?? 0;
+              const uploadedFiles = cell?.files?.length ?? 0;
+              const fileRequirementMet = uploadedFiles >= minFiles;
+              const calculationConfig = isPercentageCalculationConfig(ind.calculation_config)
+                ? ind.calculation_config
+                : null;
 
-              let foiz = "—";
-              if (typeof tgtVal === "number" && typeof cell?.value === "number") {
+              let foiz = "—";
+              if (!hasCalculatedValue(ind) && typeof tgtVal === "number" && typeof cell?.value === "number") {
                 if (tgtVal > 0) {
                   const p = (cell.value / tgtVal) * 100;
                   foiz = (p > 100 ? 100 : p).toFixed(1) + "%";
@@ -409,7 +430,29 @@ export default function SubmissionDetailPage() {
               return (
                 <tr key={ind.id} className={`align-top ${rowCls}`}>
                   <td className="px-4 py-3 text-sm font-mono">{ind.no}</td>
-                  <td className={`px-4 py-3 text-sm ${ind.is_sub_indicator ? "pl-8 text-surface-600" : ""}`}>{ind.name}</td>
+                  <td className={`px-4 py-3 text-sm ${ind.is_sub_indicator ? "pl-8 text-surface-600" : ""}`}>
+                    {ind.name}
+                    {ind.description && (
+                      <div className="mt-2 rounded-md border border-blue-100 dark:border-blue-900/50 bg-blue-50/70 dark:bg-blue-900/10 px-3 py-2 text-sm leading-relaxed text-blue-800 dark:text-blue-200">
+                        <span className="font-semibold">Izoh:</span> {ind.description}
+                      </div>
+                    )}
+                    {calculationConfig && (
+                      <div className="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-2">
+                        {[calculationConfig.denominator, ...calculationConfig.numerators].map((field) => (
+                          <div
+                            key={field.key}
+                            className="rounded-md bg-surface-50 dark:bg-surface-900/50 border border-surface-200 dark:border-surface-700 px-2 py-1"
+                          >
+                            <div className="text-[10px] text-surface-400 leading-tight">{field.label}</div>
+                            <div className="text-xs font-medium text-surface-700 dark:text-surface-300">
+                              {cell?.calculation_inputs?.[field.key] ?? "—"}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-sm text-surface-500">{ind.unit}</td>
                   <td className="px-4 py-3 text-sm text-surface-700 dark:text-surface-300">
                     {tgtVal === null || tgtVal === undefined ? <span className="text-surface-400">—</span> : tgtVal}
@@ -421,20 +464,47 @@ export default function SubmissionDetailPage() {
                   <td className="px-4 py-3">
                     <div className="space-y-1">
                       {(cell?.files ?? []).length === 0 ? (
-                        <span className="text-xs text-surface-400">—</span>
+                        <span className="text-xs text-surface-400">—</span>
                       ) : (
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs text-surface-500">
-                            {cell!.files.length} ta fayl
-                          </span>
+                        <>
+                          {cell!.files.map((filePath) => (
+                            <div key={filePath} className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => openFileInNewTab(filePath, ind.id)}
+                                disabled={openingFileFor === ind.id}
+                                title={filePath.split("/").pop()?.replace(/^\d+_/, "")}
+                                className="flex items-center gap-1 text-xs text-primary-600 dark:text-primary-400 hover:underline disabled:opacity-60 disabled:cursor-wait text-left break-all"
+                              >
+                                <svg className="w-3 h-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                </svg>
+                                {filePath.split("/").pop()?.replace(/^\d+_/, "") ?? "fayl"}
+                              </button>
+                            </div>
+                          ))}
                           <button
                             type="button"
                             onClick={() => downloadIndicatorFiles(ind.id)}
                             disabled={downloadingFor === ind.id}
-                            className="inline-flex items-center rounded-md bg-primary-600 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-60"
+                            className="mt-1 inline-flex items-center gap-1 rounded-md border border-primary-300 dark:border-primary-700 px-2 py-1 text-xs font-medium text-primary-700 dark:text-primary-300 hover:bg-primary-50 dark:hover:bg-primary-900/30 disabled:cursor-not-allowed disabled:opacity-60"
                           >
-                            {downloadingFor === ind.id ? "Tayyorlanmoqda..." : "Yuklab olish"}
+                            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                            </svg>
+                            {downloadingFor === ind.id ? "Tayyorlanmoqda..." : "Barchasini yuklab olish"}
                           </button>
+                        </>
+                      )}
+                      {minFiles > 0 && (
+                        <div
+                          className={`text-[10px] font-medium rounded-md px-2 py-1 border ${
+                            fileRequirementMet
+                              ? "bg-green-50 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-300 dark:border-green-800"
+                              : "bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-900/20 dark:text-amber-300 dark:border-amber-800"
+                          }`}
+                        >
+                          Yuklangan: {uploadedFiles} / {minFiles}
                         </div>
                       )}
                     </div>

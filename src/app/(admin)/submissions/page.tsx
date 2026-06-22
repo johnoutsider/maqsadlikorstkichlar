@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useSupabaseAuth } from "@/contexts/SupabaseAuthContext";
 import type { Submission, Faculty, Department, Quarter, SubmissionStatus } from "@/types/db";
 import { STATUS_LABEL, SELECTABLE_STATUSES } from "@/lib/workflow";
+import { getSubmissionScorePercent } from "@/lib/indicator-calculation";
 
 const QUARTERS: Quarter[] = ["Q1", "Q2", "Q3", "Q4"];
 
@@ -21,6 +22,7 @@ export default function SubmissionsListPage() {
   );
 
   const [rows, setRows] = useState<Submission[]>([]);
+  const [submitterMap, setSubmitterMap] = useState<Map<string, string>>(new Map());
   const [targets, setTargets] = useState<import("@/types/db").Target[]>([]);
   const [indicators, setIndicators] = useState<import("@/types/db").Indicator[]>([]);
   const [faculties, setFaculties] = useState<Faculty[]>([]);
@@ -42,6 +44,7 @@ export default function SubmissionsListPage() {
   const [filterYear, setFilterYear] = useState<number>(new Date().getFullYear());
   const [filterQuarter, setFilterQuarter] = useState<Quarter | "">("");
   const [filterFaculty, setFilterFaculty] = useState("");
+  const [filterDepartment, setFilterDepartment] = useState("");
 
   useEffect(() => {
     if (!user?.university_id) return;
@@ -71,6 +74,7 @@ export default function SubmissionsListPage() {
     if (filterYear) q = q.eq("year", filterYear);
     if (filterQuarter) q = q.eq("quarter", filterQuarter);
     if (filterFaculty) q = q.eq("faculty_id", filterFaculty);
+    if (filterDepartment) q = q.eq("department_id", filterDepartment);
     const { data, error: e } = await q;
 
     if (e) {
@@ -79,12 +83,30 @@ export default function SubmissionsListPage() {
       const subs = (data as Submission[]) ?? [];
       setRows(subs);
 
+      // Fetch the display names of the people who submitted these reports, so
+      // multiple reports from the same kafedra can be told apart.
+      const submitterIds = Array.from(new Set(subs.map((s) => s.submitted_by).filter(Boolean)));
+      if (submitterIds.length > 0) {
+        const { data: people } = await supabase
+          .from("users")
+          .select("id, display_name")
+          .in("id", submitterIds);
+        const map = new Map<string, string>();
+        ((people as { id: string; display_name: string }[]) ?? []).forEach((p) =>
+          map.set(p.id, p.display_name)
+        );
+        setSubmitterMap(map);
+      } else {
+        setSubmitterMap(new Map());
+      }
+
       // Fetch targets for these submissions
       if (subs.length > 0) {
         let tq = supabase.from("targets").select("*").eq("university_id", user.university_id);
         if (filterYear) tq = tq.eq("year", filterYear);
         if (filterQuarter) tq = tq.eq("quarter", filterQuarter);
         if (filterFaculty) tq = tq.eq("faculty_id", filterFaculty);
+        if (filterDepartment) tq = tq.eq("department_id", filterDepartment);
         const tr = await tq;
         setTargets((tr.data as import("@/types/db").Target[]) ?? []);
       } else {
@@ -92,12 +114,17 @@ export default function SubmissionsListPage() {
       }
     }
     setLoading(false);
-  }, [supabase, user?.university_id, user?.role, filterStatus, filterYear, filterQuarter, filterFaculty]);
+  }, [supabase, user?.university_id, user?.role, filterStatus, filterYear, filterQuarter, filterFaculty, filterDepartment]);
 
   useEffect(() => { load(); }, [load]);
 
   const facById = useMemo(() => new Map(faculties.map((x) => [x.id, x])), [faculties]);
   const depById = useMemo(() => new Map(departments.map((x) => [x.id, x])), [departments]);
+  // Kafedra options follow the chosen faculty; with no faculty selected, show all.
+  const departmentOptions = useMemo(
+    () => (filterFaculty ? departments.filter((d) => d.faculty_id === filterFaculty) : departments),
+    [departments, filterFaculty]
+  );
 
   return (
     <div>
@@ -109,7 +136,7 @@ export default function SubmissionsListPage() {
       </div>
 
       <div className="bg-white dark:bg-surface-800 rounded-lg border border-surface-200 dark:border-surface-700 p-4 mb-4">
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
           <div>
             <label className="block text-xs font-medium text-surface-600 dark:text-surface-400 mb-1">Holat</label>
             <select
@@ -145,11 +172,22 @@ export default function SubmissionsListPage() {
             <label className="block text-xs font-medium text-surface-600 dark:text-surface-400 mb-1">Fakultet</label>
             <select
               value={filterFaculty}
-              onChange={(e) => setFilterFaculty(e.target.value)}
+              onChange={(e) => { setFilterFaculty(e.target.value); setFilterDepartment(""); }}
               className="w-full rounded-md border border-surface-300 dark:border-surface-600 bg-white dark:bg-surface-800 px-3 py-2 text-sm"
             >
               <option value="">Barchasi</option>
               {faculties.map((f) => <option key={f.id} value={f.id}>{f.short_code}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-surface-600 dark:text-surface-400 mb-1">Kafedra</label>
+            <select
+              value={filterDepartment}
+              onChange={(e) => setFilterDepartment(e.target.value)}
+              className="w-full rounded-md border border-surface-300 dark:border-surface-600 bg-white dark:bg-surface-800 px-3 py-2 text-sm"
+            >
+              <option value="">Barchasi</option>
+              {departmentOptions.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
             </select>
           </div>
         </div>
@@ -166,8 +204,10 @@ export default function SubmissionsListPage() {
           <table className="w-full">
             <thead className="bg-surface-50 dark:bg-surface-900/50 border-b border-surface-200 dark:border-surface-700">
               <tr>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-surface-600 uppercase w-12">№</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-surface-600 uppercase">Fakultet</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-surface-600 uppercase">Kafedra</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-surface-600 uppercase">Yuborgan</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-surface-600 uppercase">Davr</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-surface-600 uppercase">Holat</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-surface-600 uppercase">Umumiy Ball</th>
@@ -176,21 +216,17 @@ export default function SubmissionsListPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-surface-200 dark:divide-surface-700">
-              {rows.map((s) => {
+              {rows.map((s, idx) => {
                 const depTarget = targets.find((t) => t.department_id === s.department_id && t.year === s.year && t.quarter === s.quarter);
                 let totalScore = 0;
                 let scoredItemsCount = 0;
 
                 indicators.forEach(ind => {
                   const maqsad = depTarget?.values?.[ind.id] ?? null;
-                  const qiymat = s.indicators[ind.id]?.value ?? null;
-                  if (typeof maqsad === "number" && typeof qiymat === "number") {
+                  const score = getSubmissionScorePercent(maqsad, s.indicators[ind.id]);
+                  if (typeof score === "number") {
                     scoredItemsCount++;
-                    if (maqsad > 0) {
-                      totalScore += Math.min((qiymat / maqsad) * 100, 100);
-                    } else if (maqsad === 0 && qiymat >= 0) {
-                      totalScore += 100;
-                    }
+                    totalScore += score;
                   }
                 });
 
@@ -198,8 +234,10 @@ export default function SubmissionsListPage() {
 
                 return (
                   <tr key={s.id} className="hover:bg-surface-50 dark:hover:bg-surface-900/30">
+                    <td className="px-4 py-3 text-sm text-surface-500 tabular-nums">{idx + 1}</td>
                     <td className="px-4 py-3 text-sm font-mono">{facById.get(s.faculty_id)?.short_code ?? "?"}</td>
                     <td className="px-4 py-3 text-sm">{depById.get(s.department_id)?.name ?? "?"}</td>
+                    <td className="px-4 py-3 text-sm">{submitterMap.get(s.submitted_by) ?? "—"}</td>
                     <td className="px-4 py-3 text-sm">{s.year} {s.quarter}</td>
                     <td className="px-4 py-3">
                       <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_LABEL[s.status].cls}`}>
@@ -227,7 +265,5 @@ export default function SubmissionsListPage() {
     </div>
   );
 }
-
-
 
 

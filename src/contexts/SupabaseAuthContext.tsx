@@ -3,7 +3,7 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from "react";
 import type { Session, User as SupabaseUser } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
-import type { CurrentUser } from "@/types/db";
+import type { CurrentUser, GrantedRole, RoleName } from "@/types/db";
 import { useRouter } from "next/navigation";
 
 interface SupabaseAuthContextType {
@@ -15,6 +15,7 @@ interface SupabaseAuthContextType {
   refresh: () => Promise<void>;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
+  switchRole: (roleName: RoleName) => Promise<{ error: string | null }>;
 }
 
 const SupabaseAuthContext = createContext<SupabaseAuthContextType>({
@@ -26,6 +27,7 @@ const SupabaseAuthContext = createContext<SupabaseAuthContextType>({
   refresh: async () => {},
   signIn: async () => ({ error: "not initialized" }),
   signOut: async () => {},
+  switchRole: async () => ({ error: "not initialized" }),
 });
 
 export function SupabaseAuthProvider({ children }: { children: React.ReactNode }) {
@@ -46,14 +48,49 @@ export function SupabaseAuthProvider({ children }: { children: React.ReactNode }
 
   const loadProfile = useCallback(
     async (uid: string): Promise<CurrentUser | null> => {
+      // The active role (users.role_id) is the source of truth for guards/RLS.
+      // This query must never be coupled to user_roles — keep it standalone so
+      // a problem with the grants table can never lock a user out of login.
       const { data, error } = await supabase
         .from("users")
-        .select("*, roles!inner(name, scope)")
+        .select("*, roles!users_role_id_fkey!inner(name, scope)")
         .eq("id", uid)
         .maybeSingle();
-      if (error || !data) return null;
+      if (error || !data) {
+        if (error) console.error("[SupabaseAuth] loadProfile failed:", error);
+        return null;
+      }
       const { roles, ...rest } = data as any;
-      return { ...rest, role: roles.name, role_scope: roles.scope } as CurrentUser;
+      const activeRole = roles.name as CurrentUser["role"];
+      const activeScope = roles.scope as CurrentUser["role_scope"];
+
+      // Load the granted roles separately. If this fails (e.g. the migration
+      // hasn't run yet), fall back to a single grant for the active role so
+      // the user can still log in and use the app.
+      let roles_granted: GrantedRole[] = [
+        { role_id: (rest as any).role_id, name: activeRole, scope: activeScope, is_primary: true },
+      ];
+      const { data: grants, error: grantsError } = await supabase
+        .from("user_roles")
+        .select("role_id, is_primary, roles(name, scope)")
+        .eq("user_id", uid);
+      if (grantsError) {
+        console.error("[SupabaseAuth] loadProfile grants failed:", grantsError);
+      } else if (grants && grants.length > 0) {
+        roles_granted = (grants as any[]).map((grant) => ({
+          role_id: grant.role_id,
+          name: grant.roles.name,
+          scope: grant.roles.scope,
+          is_primary: grant.is_primary,
+        }));
+      }
+
+      return {
+        ...rest,
+        role: activeRole,
+        role_scope: activeScope,
+        roles_granted,
+      } as CurrentUser;
     },
     [supabase]
   );
@@ -166,8 +203,21 @@ export function SupabaseAuthProvider({ children }: { children: React.ReactNode }
     setProfileLoading(false);
   }, [supabase]);
 
+  const switchRole = useCallback(
+    async (roleName: RoleName) => {
+      const grant = user?.roles_granted.find((r) => r.name === roleName);
+      if (!grant) return { error: "Role not granted to user" };
+      const { error } = await supabase.rpc("switch_active_role", {
+        p_role_id: grant.role_id,
+      });
+      if (error) return { error: error.message };
+      return { error: null };
+    },
+    [supabase, user]
+  );
+
   return (
-    <SupabaseAuthContext.Provider value={{ user, session, authUser, loading, profileLoading, refresh, signIn, signOut }}>
+    <SupabaseAuthContext.Provider value={{ user, session, authUser, loading, profileLoading, refresh, signIn, signOut, switchRole }}>
       {children}
     </SupabaseAuthContext.Provider>
   );

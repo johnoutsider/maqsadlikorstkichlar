@@ -6,11 +6,16 @@ import { useSupabaseAuth } from "@/contexts/SupabaseAuthContext";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
-import type { Indicator } from "@/types/db";
+import type { Indicator, IndicatorCalculationConfig, IndicatorSubmission, Quarter } from "@/types/db";
+import { isPercentageCalculationConfig } from "@/lib/indicator-calculation";
 import {
   DEFAULT_SUBMISSION_FILE_EXTENSIONS,
   SUBMISSION_FILE_FORMATS,
 } from "@/lib/upload-validation";
+import { QUARTER_LABELS } from "@/lib/constants";
+
+const QUARTERS: Quarter[] = ["Q1", "Q2", "Q3", "Q4"];
+const CAN_DOWNLOAD_ROLES = ["university_admin", "vice_rector", "science_department", "super_admin"];
 
 export default function IndicatorsPage() {
   const supabase = createClient();
@@ -20,15 +25,27 @@ export default function IndicatorsPage() {
   const [error, setError] = useState("");
   const [reordering, setReordering] = useState(false);
 
+  const canDownload = !!user?.role && CAN_DOWNLOAD_ROLES.includes(user.role);
+  const [fileYear, setFileYear] = useState<number>(new Date().getFullYear());
+  const [fileQuarter, setFileQuarter] = useState<Quarter | "">("");
+  const [fileCounts, setFileCounts] = useState<Map<string, number>>(new Map());
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [downloadProgress, setDownloadProgress] = useState(0);
+
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Indicator | null>(null);
   const [no, setNo] = useState("");
   const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
   const [unit, setUnit] = useState("");
   const [isSub, setIsSub] = useState(false);
   const [parentId, setParentId] = useState<string>("");
   const [minPages, setMinPages] = useState("");
   const [maxPages, setMaxPages] = useState("");
+  const [minFiles, setMinFiles] = useState("0");
+  const [usePercentageCalculation, setUsePercentageCalculation] = useState(false);
+  const [denominatorLabel, setDenominatorLabel] = useState("");
+  const [numeratorLabels, setNumeratorLabels] = useState<string[]>([""]);
   const [allowedFileExtensions, setAllowedFileExtensions] = useState<string[]>(
     DEFAULT_SUBMISSION_FILE_EXTENSIONS
   );
@@ -54,8 +71,116 @@ export default function IndicatorsPage() {
 
   useEffect(() => { load(); }, [load]);
 
+  const loadFileCounts = useCallback(async () => {
+    if (!user?.university_id || !canDownload) return;
+    let q = supabase
+      .from("submissions")
+      .select("indicators")
+      .eq("university_id", user.university_id)
+      .eq("year", fileYear);
+    if (fileQuarter) q = q.eq("quarter", fileQuarter);
+    const { data } = await q;
+    const counts = new Map<string, number>();
+    for (const row of data ?? []) {
+      const indicators = (row.indicators ?? {}) as Record<string, IndicatorSubmission>;
+      for (const [indicatorId, entry] of Object.entries(indicators)) {
+        const fileCount = entry?.files?.length ?? 0;
+        if (fileCount > 0) counts.set(indicatorId, (counts.get(indicatorId) ?? 0) + fileCount);
+      }
+    }
+    setFileCounts(counts);
+  }, [supabase, user?.university_id, canDownload, fileYear, fileQuarter]);
+
+  useEffect(() => { loadFileCounts(); }, [loadFileCounts]);
+
+  const downloadAll = async (indicator: Indicator) => {
+    setDownloadingId(indicator.id);
+    setDownloadProgress(0);
+    try {
+      const params = new URLSearchParams({ year: String(fileYear) });
+      if (fileQuarter) params.set("quarter", fileQuarter);
+      const res = await fetch(`/api/indicators/${indicator.id}/signed-urls?${params}`);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        alert(body.error ?? "Fayllarni yuklab bo'lmadi.");
+        return;
+      }
+      const { folderName, zipName, files } = (await res.json()) as {
+        folderName: string;
+        zipName: string;
+        files: { url: string; name: string }[];
+      };
+
+      // Stream the ZIP straight to disk. Files are prefetched in a sliding window
+      // (CONCURRENCY in flight) so byte transfer happens in parallel, but they are
+      // yielded to the archive in order. Memory stays bounded to ~window * filesize.
+      const [{ downloadZip }, streamSaverMod] = await Promise.all([
+        import("client-zip"),
+        import("streamsaver"),
+      ]);
+      const streamSaver = streamSaverMod.default;
+      streamSaver.mitm = "/streamsaver/mitm.html";
+
+      // ponytail: 12 parallel downloads — well past the HTTP/2 sweet spot, capped
+      // so memory and the connection pool stay sane. Raise only if measured slow.
+      const CONCURRENCY = 12;
+      let done = 0;
+      async function* prefetchedFiles() {
+        const queue: { name: string; blob: Promise<Blob> }[] = [];
+        let next = 0;
+        const startOne = (i: number) => ({
+          name: `${folderName}/${files[i].name}`,
+          blob: fetch(files[i].url).then((r) => r.blob()),
+        });
+        while (next < files.length && queue.length < CONCURRENCY) queue.push(startOne(next++));
+        while (queue.length) {
+          const item = queue.shift()!;
+          const blob = await item.blob;
+          done += 1;
+          setDownloadProgress(Math.round((done / files.length) * 100));
+          if (next < files.length) queue.push(startOne(next++));
+          yield { name: item.name, input: blob };
+        }
+      }
+
+      const fileStream = streamSaver.createWriteStream(zipName);
+      const zipBody = downloadZip(prefetchedFiles()).body;
+      if (!zipBody) throw new Error("ZIP oqimini yaratib bo'lmadi.");
+      await zipBody.pipeTo(fileStream);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Yuklab olishda xatolik.");
+    } finally {
+      setDownloadingId(null);
+      setDownloadProgress(0);
+    }
+  };
+
   // parent indicators = non-sub indicators that other rows can be grouped under
   const parentOptions = rows.filter((r) => !r.is_sub_indicator);
+
+  const makeFieldKey = (label: string, index: number) => {
+    const base = label
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "");
+    return base ? `${base}_${index + 1}` : `field_${index + 1}`;
+  };
+
+  const normalizeCalculationConfig = (): IndicatorCalculationConfig | null => {
+    if (!usePercentageCalculation) return null;
+    const denominator = denominatorLabel.trim();
+    const numerators = numeratorLabels.map((label) => label.trim()).filter(Boolean);
+    if (!denominator || numerators.length === 0) return null;
+    return {
+      type: "percentage",
+      denominator: { key: "denominator", label: denominator },
+      numerators: numerators.map((label, index) => ({
+        key: makeFieldKey(label, index),
+        label,
+      })),
+    };
+  };
 
   // ── Drag-and-drop ──────────────────────────────────────────────
   const handleDragStart = (e: React.DragEvent, idx: number) => {
@@ -98,11 +223,16 @@ export default function IndicatorsPage() {
     setEditing(null);
     setNo("");
     setName("");
+    setDescription("");
     setUnit("");
     setIsSub(false);
     setParentId("");
     setMinPages("");
     setMaxPages("");
+    setMinFiles("0");
+    setUsePercentageCalculation(false);
+    setDenominatorLabel("");
+    setNumeratorLabels([""]);
     setAllowedFileExtensions(DEFAULT_SUBMISSION_FILE_EXTENSIONS);
     setFormError("");
     setModalOpen(true);
@@ -112,11 +242,23 @@ export default function IndicatorsPage() {
     setEditing(i);
     setNo(i.no);
     setName(i.name);
+    setDescription(i.description ?? "");
     setUnit(i.unit);
     setIsSub(i.is_sub_indicator);
     setParentId(i.parent_id ?? "");
     setMinPages(i.min_pages !== null ? String(i.min_pages) : "");
     setMaxPages(i.max_pages !== null ? String(i.max_pages) : "");
+    setMinFiles(String(i.min_files ?? 0));
+    const calculationConfig = isPercentageCalculationConfig(i.calculation_config)
+      ? i.calculation_config
+      : null;
+    setUsePercentageCalculation(!!calculationConfig);
+    setDenominatorLabel(calculationConfig?.denominator.label ?? "");
+    setNumeratorLabels(
+      calculationConfig?.numerators.length
+        ? calculationConfig.numerators.map((field) => field.label)
+        : [""]
+    );
     setAllowedFileExtensions(
       i.allowed_file_extensions?.length
         ? i.allowed_file_extensions
@@ -141,6 +283,21 @@ export default function IndicatorsPage() {
     if (allowedFileExtensions.length === 0) {
       setFormError("Kamida bitta fayl formatini tanlang.");
       return;
+    }
+    const parsedMinFiles = minFiles.trim() !== "" ? parseInt(minFiles, 10) : 0;
+    if (isNaN(parsedMinFiles) || parsedMinFiles < 0) {
+      setFormError("Eng kam fayllar soni 0 yoki undan katta son bo'lishi kerak.");
+      return;
+    }
+    if (usePercentageCalculation) {
+      if (!denominatorLabel.trim()) {
+        setFormError("Foiz hisoblash uchun asosiy maydon labelini kiriting.");
+        return;
+      }
+      if (numeratorLabels.map((label) => label.trim()).filter(Boolean).length === 0) {
+        setFormError("Foiz hisoblash uchun kamida bitta qo'shiladigan maydon kiriting.");
+        return;
+      }
     }
     setSaving(true);
     const orderIdx = editing
@@ -168,6 +325,7 @@ export default function IndicatorsPage() {
     const payload = {
       no: no.trim(),
       name: name.trim(),
+      description: description.trim() || null,
       unit: unit.trim(),
       order_idx: orderIdx,
       is_sub_indicator: isSub,
@@ -175,7 +333,9 @@ export default function IndicatorsPage() {
       university_id: user.university_id,
       min_pages: parsedMin,
       max_pages: parsedMax,
+      min_files: parsedMinFiles,
       allowed_file_extensions: allowedFileExtensions,
+      calculation_config: normalizeCalculationConfig(),
     };
     const { error: e2 } = editing
       ? await supabase.from("indicators").update(payload).eq("id", editing.id)
@@ -212,6 +372,32 @@ export default function IndicatorsPage() {
         <Button onClick={openCreate}>+ Yangi ko&apos;rsatkich</Button>
       </div>
 
+      {canDownload && (
+        <div className="mb-4 flex items-end gap-3 bg-white dark:bg-surface-800 rounded-lg border border-surface-200 dark:border-surface-700 p-3">
+          <div>
+            <label className="block text-xs font-medium text-surface-600 dark:text-surface-400 mb-1">Yil</label>
+            <input
+              type="number"
+              value={fileYear}
+              onChange={(e) => setFileYear(Number(e.target.value))}
+              className="w-24 rounded-md border border-surface-300 dark:border-surface-600 bg-white dark:bg-surface-800 px-3 py-2 text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-surface-600 dark:text-surface-400 mb-1">Chorak</label>
+            <select
+              value={fileQuarter}
+              onChange={(e) => setFileQuarter(e.target.value as Quarter | "")}
+              className="rounded-md border border-surface-300 dark:border-surface-600 bg-white dark:bg-surface-800 px-3 py-2 text-sm"
+            >
+              <option value="">Barchasi</option>
+              {QUARTERS.map((q) => <option key={q} value={q}>{QUARTER_LABELS[q]}</option>)}
+            </select>
+          </div>
+          <p className="text-xs text-surface-400 pb-2">Fayllar soni va yuklab olish shu davr bo&apos;yicha hisoblanadi</p>
+        </div>
+      )}
+
       {error && (
         <div className="mb-4 p-3 bg-danger-50 dark:bg-danger-900/30 text-danger-600 dark:text-danger-400 rounded-lg text-sm">{error}</div>
       )}
@@ -231,6 +417,9 @@ export default function IndicatorsPage() {
                 <th className="px-4 py-3 text-left text-xs font-semibold text-surface-600 uppercase w-24">Birlik</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-surface-600 uppercase w-28">Turi</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-surface-600 uppercase w-52">Fayl formatlari</th>
+                {canDownload && (
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-surface-600 uppercase w-44">Yuklangan fayllar</th>
+                )}
                 <th className="px-4 py-3" />
               </tr>
             </thead>
@@ -273,6 +462,11 @@ export default function IndicatorsPage() {
                           YIG&apos;INDI
                         </span>
                       )}
+                      {ind.description && (
+                        <div className="mt-2 rounded-md border border-blue-100 dark:border-blue-900/50 bg-blue-50/70 dark:bg-blue-900/10 px-3 py-2 text-xs font-normal leading-relaxed text-blue-800 dark:text-blue-200">
+                          <span className="font-semibold">Izoh:</span> {ind.description}
+                        </div>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-sm text-surface-500">{ind.unit}</td>
                     <td className="px-4 py-3 text-xs text-surface-500">
@@ -285,6 +479,16 @@ export default function IndicatorsPage() {
                           </span>
                         ) : (
                           <span className="text-surface-400">Oddiy</span>
+                        )}
+                        {isPercentageCalculationConfig(ind.calculation_config) && (
+                          <span className="inline-block px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 text-[10px] font-medium">
+                            FOIZ FORMULA
+                          </span>
+                        )}
+                        {(ind.min_files ?? 0) > 0 && (
+                          <span className="inline-block px-1.5 py-0.5 rounded bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300 text-[10px] font-medium">
+                            Kamida {ind.min_files} fayl
+                          </span>
                         )}
                         {(ind.min_pages !== null || ind.max_pages !== null) && (
                           <span className="inline-block px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300 text-[10px] font-medium">
@@ -308,6 +512,22 @@ export default function IndicatorsPage() {
                         ))}
                       </div>
                     </td>
+                    {canDownload && (
+                      <td className="px-4 py-3 text-sm">
+                        <div className="flex items-center gap-2">
+                          <span className="text-surface-500">{fileCounts.get(ind.id) ?? 0} ta</span>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={!fileCounts.get(ind.id) || downloadingId === ind.id}
+                            isLoading={downloadingId === ind.id}
+                            onClick={() => downloadAll(ind)}
+                          >
+                            {downloadingId === ind.id ? `${downloadProgress}%` : "Yuklab olish"}
+                          </Button>
+                        </div>
+                      </td>
+                    )}
                     <td className="px-4 py-3 text-right space-x-2">
                       <Button variant="outline" size="sm" onClick={() => openEdit(ind)}>Tahrirlash</Button>
                       <Button variant="danger" size="sm" onClick={() => remove(ind)}>O&apos;chirish</Button>
@@ -330,6 +550,97 @@ export default function IndicatorsPage() {
             <Input label="Birlik" value={unit} onChange={(e) => setUnit(e.target.value)} placeholder="%, nafar, dona" required />
           </div>
           <Input label="Nomi" value={name} onChange={(e) => setName(e.target.value)} required />
+
+          <div>
+            <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">
+              Izoh
+            </label>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              rows={3}
+              placeholder="Indikator uchun qo'shimcha tushuntirish..."
+              className="w-full rounded-md border border-surface-300 dark:border-surface-600 bg-white dark:bg-surface-800 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+            />
+          </div>
+
+          <div className="rounded-lg border border-surface-200 dark:border-surface-700 p-3 space-y-3">
+            <label className="flex items-start gap-2 text-sm cursor-pointer">
+              <input
+                type="checkbox"
+                className="mt-1"
+                checked={usePercentageCalculation}
+                onChange={(e) => setUsePercentageCalculation(e.target.checked)}
+              />
+              <span>
+                <span className="font-medium text-surface-700 dark:text-surface-300">
+                  Amal qiymatini foiz formulasi orqali hisoblash
+                </span>
+                <span className="block text-xs text-surface-400 mt-0.5">
+                  Yoqilsa, xodim Amal qiymatini qo'lda kirita olmaydi; qiymat quyidagi maydonlardan hisoblanadi.
+                </span>
+              </span>
+            </label>
+
+            {usePercentageCalculation && (
+              <div className="space-y-3 border-t border-surface-200 dark:border-surface-700 pt-3">
+                <Input
+                  label="Asosiy maydon labeli"
+                  value={denominatorLabel}
+                  onChange={(e) => setDenominatorLabel(e.target.value)}
+                  placeholder="Masalan: Asosiy shtatdagi o'qituvchilar soni"
+                  required={usePercentageCalculation}
+                />
+                <div>
+                  <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">
+                    Foizga qo'shiladigan maydonlar
+                  </label>
+                  <div className="space-y-2">
+                    {numeratorLabels.map((label, index) => (
+                      <div key={index} className="flex gap-2">
+                        <input
+                          value={label}
+                          onChange={(e) =>
+                            setNumeratorLabels((current) =>
+                              current.map((item, itemIndex) =>
+                                itemIndex === index ? e.target.value : item
+                              )
+                            )
+                          }
+                          placeholder={index === 0 ? "Masalan: shundan DSc lar soni" : "Maydon labeli"}
+                          className="w-full rounded-md border border-surface-300 dark:border-surface-600 bg-white dark:bg-surface-800 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() =>
+                            setNumeratorLabels((current) =>
+                              current.length === 1 ? [""] : current.filter((_, itemIndex) => itemIndex !== index)
+                            )
+                          }
+                        >
+                          O'chirish
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="mt-2"
+                    onClick={() => setNumeratorLabels((current) => [...current, ""])}
+                  >
+                    + Maydon qo'shish
+                  </Button>
+                </div>
+                <div className="rounded-md bg-surface-50 dark:bg-surface-900/50 px-3 py-2 text-xs text-surface-500 dark:text-surface-400">
+                  Formula: (qo'shiladigan maydonlar yig'indisi) / asosiy maydon * 100
+                </div>
+              </div>
+            )}
+          </div>
 
           <div>
             <div className="mb-2">
@@ -363,6 +674,15 @@ export default function IndicatorsPage() {
               ))}
             </div>
           </div>
+
+          <Input
+            label="Eng kam yuklanishi kerak bo'lgan fayllar soni"
+            type="number"
+            min={0}
+            value={minFiles}
+            onChange={(e) => setMinFiles(e.target.value)}
+            placeholder="0"
+          />
 
           <div>
             <div className="flex items-center gap-2 mb-1">

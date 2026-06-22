@@ -15,6 +15,7 @@ const ROLE_LABEL_TO_NAME: Record<string, RoleName> = {
   "Universitet admin": "university_admin",
   "Prorektor": "vice_rector",
   "Ilmiy bo'lim": "science_department",
+  "Nazoratchi": "monitor",
   "Dekan": "dean",
   "Kafedra mudiri": "staff_manager",
 };
@@ -51,7 +52,7 @@ export async function POST(req: Request) {
 
   const { data: caller } = await supabase
     .from("users")
-    .select("university_id, roles!inner(name)")
+    .select("university_id, roles!users_role_id_fkey!inner(name)")
     .eq("id", authUser.id)
     .maybeSingle();
   if (!caller) return bad("Caller profile missing", 403);

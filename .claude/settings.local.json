@@ -35,7 +35,26 @@
       "PowerShell(cd \"C:\\\\Users\\\\Jakhongir Khasanov\\\\.claude\\\\skills\\\\notebooklm\"; $env:PYTHONIOENCODING=\"utf-8\"; python scripts/run.py auth_manager.py status)",
       "Bash(Get-ChildItem -Path \"D:\\\\Coding\\\\Antigravity folder\\\\maqsadlikorstkichlar\" -Force)",
       "Bash(Select-Object Name, PSIsContainer)",
-      "Bash(xargs grep -l \"submission\")"
+      "Bash(xargs grep -l \"submission\")",
+      "Bash(env)",
+      "Bash(find / -maxdepth 6 -iname \"*supabase*\" 2>/dev/null | grep -v node_modules | grep -v \"/proc/\" ; echo \"---\"; find ~ -maxdepth 5 -iname \"*.supabase*\" 2>/dev/null)",
+      "Bash(git commit *)",
+      "Bash(rm -f .git/COMMIT_EDITMSG_TMP)",
+      "Bash(git ls-remote *)",
+      "Bash(ls vercel.json)",
+      "Bash(echo \"EXIT:$?\")",
+      "Bash(npx eslint *)",
+      "mcp__visualize__read_me",
+      "mcp__visualize__show_widget",
+      "Bash(ls .claude/)",
+      "Bash(cat .claude/launch.json)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code} %{redirect_url}\\\\n\" http://localhost:50491/profil)",
+      "Bash(gh pr *)",
+      "Read(//tmp/**)",
+      "Bash(grep -nA 8 \"interface.*ModalProps\\\\|export function Modal\\\\|export const Modal\" src/components/ui/Modal.tsx)",
+      "PowerShell(cd \"D:\\\\Coding\\\\Antigravity folder\\\\maqsadlikorstkichlar\"; $p = Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction SilentlyContinue; if \\($p\\) { $proc = Get-Process -Id $p.OwningProcess -ErrorAction SilentlyContinue; Write-Output \\(\"Port 3000 in use by: {0} \\(PID {1}\\)\" -f $proc.ProcessName, $p.OwningProcess\\) } else { Write-Output \"Nothing listening on port 3000\" })",
+      "Bash(node -e \"const p=require\\('./package.json'\\); console.log\\(JSON.stringify\\(p.scripts,null,2\\)\\); console.log\\('deps:', Object.keys\\(p.dependencies||{}\\).filter\\(d=>/supabase|dotenv|tsx|ts-node/.test\\(d\\)\\)\\)\")",
+      "Bash(git reset *)"
     ]
   }
 }

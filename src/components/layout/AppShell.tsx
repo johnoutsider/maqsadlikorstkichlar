@@ -1,11 +1,12 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { useSupabaseAuth } from "@/contexts/SupabaseAuthContext";
 import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
+import { roleHome } from "@/lib/role-home";
 import type { RoleName, University } from "@/types/db";
 
 export interface UniversityBrand {
@@ -63,6 +64,7 @@ export function AppShell({
   children: React.ReactNode;
 }) {
   const router = useRouter();
+  const pathname = usePathname();
   const supabase = createClient();
   const { user, loading } = useSupabaseAuth();
   const [unread, setUnread] = useState(0);
@@ -99,9 +101,13 @@ export function AppShell({
       return;
     }
     if (!allowed.includes(user.role)) {
-      router.replace(fallbackFor ? fallbackFor(user.role) : "/overview");
+      router.replace(fallbackFor ? fallbackFor(user.role) : roleHome(user.role));
+      return;
     }
-  }, [user, loading, router, allowed, fallbackFor]);
+    if (user.must_change_password && pathname !== "/profil") {
+      router.replace("/profil");
+    }
+  }, [user, loading, router, allowed, fallbackFor, pathname]);
 
   useEffect(() => {
     if (!user) return;
@@ -206,7 +212,12 @@ export function AppShell({
     document.title = `${brand.name} - KPI Tizimi`;
   }, [brand.name]);
 
-  if (loading || !user || !allowed.includes(user.role)) {
+  if (
+    loading ||
+    !user ||
+    !allowed.includes(user.role) ||
+    (user.must_change_password && pathname !== "/profil")
+  ) {
     return (
       <div
         className="min-h-screen flex items-center justify-center"

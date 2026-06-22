@@ -6,7 +6,7 @@ import type { RoleName } from "@/types/db";
 const ALLOWED: RoleName[] = ["super_admin"];
 
 export default async function SuperAdminLayout({ children }: { children: React.ReactNode }) {
-  await requireRole(ALLOWED, () => "/overview");
+  await requireRole(ALLOWED);
 
   return (
     <AppShell allowed={ALLOWED}>

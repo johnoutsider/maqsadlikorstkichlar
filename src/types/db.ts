@@ -48,6 +48,7 @@ export type RoleName =
   | "dean"
   | "staff_manager"
   | "oquv_bolimi"
+  | "monitor"
   | "doktorant"
   | "supervisor"
   | (string & {});
@@ -106,15 +107,31 @@ export interface Indicator {
   university_id: string;
   no: string;
   name: string;
+  description: string | null;
   unit: string;
   order_idx: number;
   is_sub_indicator: boolean;
   parent_id: string | null;
   min_pages: number | null;
   max_pages: number | null;
+  min_files: number;
   allowed_file_extensions: string[];
+  calculation_config: IndicatorCalculationConfig | null;
   created_at: string;
 }
+
+export interface IndicatorCalculationField {
+  key: string;
+  label: string;
+}
+
+export interface PercentageCalculationConfig {
+  type: "percentage";
+  denominator: IndicatorCalculationField;
+  numerators: IndicatorCalculationField[];
+}
+
+export type IndicatorCalculationConfig = PercentageCalculationConfig;
 
 export interface Target {
   id: string;
@@ -131,6 +148,7 @@ export interface Target {
 export interface IndicatorSubmission {
   value: number | null;
   files: string[]; // storage paths within `submissions` bucket
+  calculation_inputs?: Record<string, number | null>;
 }
 
 export interface Submission {
@@ -165,10 +183,18 @@ export interface Notification {
   created_at: string;
 }
 
+export interface GrantedRole {
+  role_id: string;
+  name: RoleName;
+  scope: RoleScope;
+  is_primary: boolean;
+}
+
 // Enriched user used by the auth context — joins role + scope info.
 export interface CurrentUser extends AppUser {
   role: RoleName;
   role_scope: RoleScope;
+  roles_granted: GrantedRole[];
 }
 
 export interface Supervisor {
@@ -205,6 +231,100 @@ export interface Doktorant {
   metadata: Record<string, unknown>;
   created_at: string;
   updated_at: string;
+}
+
+export type IzlanuvchiTuri = "doktorant" | "mustaqil";
+
+export interface Izlanuvchi {
+  id: string;
+  university_id: string;
+  turi: IzlanuvchiTuri;
+  department_id: string | null;
+  source_no: string | null;
+  full_name: string;
+  specialty_name: string | null;
+  specialty_code: string | null;
+  education_stage: string | null;
+  admission_year: string | null;
+  age: number | null;
+  gender: "erkak" | "ayol" | null;
+  pinfl: string | null;
+  submission_date: string | null;
+  course: string | null;
+  monitoring_1: string | null;
+  monitoring_2: string | null;
+  monitoring_3: string | null;
+  district: string | null;
+  research_topic: string | null;
+  supervisor_name: string | null;
+  status: string | null;
+  talim_tili: string | null;
+  chorak: string | null;
+  phone: string | null;
+  himoya_holati: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
+export type MonitoringResearcherSource = "doktorantlar" | "izlanuvchilar";
+
+export interface MonitoringEvaluation {
+  id: string;
+  university_id: string;
+  researcher_source: MonitoringResearcherSource;
+  doktorant_id: string | null;
+  izlanuvchi_id: string | null;
+  department_id: string | null;
+  full_name: string;
+  education_level: string | null;
+  specialty_code: string | null;
+  research_topic: string | null;
+  advisor_name: string | null;
+  course: string | null;
+  admission_year: string | null;
+  submission_date: string | null;
+  monitoring_period: string;
+  raw_score: number;
+  scored_item_count: number;
+  average_score: number;
+  total_score: number;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MonitoringEvaluationItem {
+  id: string;
+  evaluation_id: string;
+  section_no: number;
+  section_title: string;
+  criterion_key: string;
+  indicator_label: string;
+  max_score: number;
+  score: number | null;
+  comment: string | null;
+  disabled: boolean;
+  created_at: string;
+}
+
+export type MonitoringEvaluationLogField = "score" | "comment";
+export type MonitoringEvaluationDeviceKind = "kompyuter" | "mobil";
+
+export interface MonitoringEvaluationLog {
+  id: string;
+  evaluation_id: string;
+  university_id: string;
+  changed_by: string;
+  changed_by_name: string;
+  device_kind: MonitoringEvaluationDeviceKind;
+  ip_address: string | null;
+  criterion_key: string;
+  indicator_label: string;
+  field: MonitoringEvaluationLogField;
+  old_value: string | null;
+  new_value: string | null;
+  created_at: string;
 }
 
 export type RecommendationStatus = "davom_etsin" | "qayta_korib_chiqsin" | "muddatni_uzaytirsin";
@@ -466,6 +586,30 @@ export interface DefenseApplication {
   review_history: DefenseReviewHistoryEntry[];
   created_at: string;
   updated_at: string;
+}
+
+// ============================================================================
+// Submission Deadlines (ilmiy bo'lim tomonidan belgilanadigan muddat)
+// ============================================================================
+
+export type DeadlineScope = 'all' | 'specific';
+
+export interface SubmissionDeadline {
+  id: string;
+  university_id: string;
+  year: number;
+  quarter: Quarter;
+  deadline_at: string; // timestamptz → ISO string
+  applies_to: DeadlineScope;
+  is_active: boolean;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SubmissionDeadlineUser {
+  deadline_id: string;
+  user_id: string;
 }
 
 export interface TelegramContact {

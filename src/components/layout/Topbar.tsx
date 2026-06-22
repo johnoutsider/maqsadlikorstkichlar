@@ -4,6 +4,7 @@ import React, { useState, useRef, useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { useSupabaseAuth } from "@/contexts/SupabaseAuthContext";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
+import { roleHome } from "@/lib/role-home";
 import type { UniversityBrand } from "./AppShell";
 
 const ROLE_LABEL: Record<string, string> = {
@@ -13,6 +14,10 @@ const ROLE_LABEL: Record<string, string> = {
   science_department: "Ilmiy Bo'lim",
   dean: "Dekan",
   staff_manager: "Kafedra Mas'uli",
+  oquv_bolimi: "O'quv Bo'lim",
+  monitor: "Nazoratchi",
+  supervisor: "Ilmiy rahbar",
+  doktorant: "Doktorant",
 };
 
 const BREADCRUMB_LABELS: Record<string, string> = {
@@ -28,13 +33,25 @@ const BREADCRUMB_LABELS: Record<string, string> = {
   form: "Hisobot Formasi",
   "my-submissions": "Mening Hisobotlarim",
   notifications: "Bildirishnomalar",
+  nazoratchi: "Nazoratchi",
+  izlanuvchilar: "Izlanuvchilar",
+  doktorant: "Doktorantlar",
+  mustaqil: "Mustaqil izlanuvchilar",
+  baholash: "Baholash",
+  natijalar: "Natijalar",
+  "monitoring-natijalari": "Monitoring natijalari",
+  muddatlar: "Hisobot Muddatlari",
+  create: "Yangi izlanuvchi",
+  edit: "Tahrirlash",
 };
 
 export function Topbar({ brand }: { brand: UniversityBrand }) {
-  const { user, signOut } = useSupabaseAuth();
+  const { user, signOut, switchRole } = useSupabaseAuth();
   const router = useRouter();
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const [switching, setSwitching] = useState(false);
+  const [switchError, setSwitchError] = useState("");
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -107,7 +124,10 @@ export function Topbar({ brand }: { brand: UniversityBrand }) {
       <div className="flex items-center gap-3">
         <div className="relative" ref={dropdownRef}>
           <button
-            onClick={() => setOpen((v) => !v)}
+            onClick={() => {
+              setSwitchError("");
+              setOpen((v) => !v);
+            }}
             className="flex items-center gap-2.5 px-3 py-1.5 rounded-xl transition-all"
             style={{
               background: open ? "var(--surface-container)" : "transparent",
@@ -198,6 +218,103 @@ export function Topbar({ brand }: { brand: UniversityBrand }) {
                   </span>
                 </div>
               </div>
+
+              {/* Profile link */}
+              <div className="p-2" style={{ borderBottom: "1px solid var(--outline-variant)" }}>
+                <button
+                  onClick={() => {
+                    setOpen(false);
+                    router.push("/profil");
+                  }}
+                  className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm transition-colors text-left"
+                  style={{ color: "var(--on-surface)" }}
+                  onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "var(--surface-container-low)"; }}
+                  onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}
+                >
+                  <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  </svg>
+                  Profil
+                </button>
+              </div>
+
+              {/* Role switcher */}
+              {user.roles_granted.length > 1 && (
+                <div
+                  className="px-4 py-3"
+                  style={{ borderBottom: "1px solid var(--outline-variant)" }}
+                >
+                  <p
+                    className="mb-2 font-medium uppercase"
+                    style={{ fontSize: "0.625rem", letterSpacing: "0.08em", color: "var(--on-surface-variant)" }}
+                  >
+                    Rol
+                  </p>
+                  <div className="space-y-1">
+                    {user.roles_granted.map((grant) => {
+                      const active = grant.name === user.role;
+                      return (
+                        <button
+                          key={grant.role_id}
+                          disabled={active || switching}
+                          onClick={async () => {
+                            setSwitchError("");
+                            setSwitching(true);
+                            const { error } = await switchRole(grant.name);
+                            if (error) {
+                              setSwitchError(error);
+                              setSwitching(false);
+                              return;
+                            }
+
+                            // A full navigation keeps the old layout from racing
+                            // the new role's server-side route guard.
+                            window.location.replace(roleHome(grant.name));
+                          }}
+                          className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-sm transition-colors text-left disabled:cursor-default"
+                          style={{
+                            background: active ? "var(--surface-container-high)" : "transparent",
+                            color: "var(--on-surface)",
+                            fontWeight: active ? 600 : 400,
+                          }}
+                          onMouseEnter={(e) => {
+                            if (!active) (e.currentTarget as HTMLElement).style.background = "var(--surface-container-low)";
+                          }}
+                          onMouseLeave={(e) => {
+                            if (!active) (e.currentTarget as HTMLElement).style.background = "transparent";
+                          }}
+                        >
+                          <span>{ROLE_LABEL[grant.name] ?? grant.name}</span>
+                          {grant.is_primary && (
+                            <span
+                              className="rounded-full px-2 py-0.5 font-medium"
+                              style={{
+                                fontSize: "0.625rem",
+                                background: "var(--surface-container-high)",
+                                color: "var(--on-surface-variant)",
+                              }}
+                            >
+                              Asosiy
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {switchError && (
+                    <p
+                      className="mt-2 rounded-lg px-3 py-2"
+                      style={{
+                        background: "#ffdad6",
+                        color: "#410002",
+                        fontSize: "0.75rem",
+                      }}
+                    >
+                      Rolni almashtirib bo&apos;lmadi: {switchError}
+                    </p>
+                  )}
+                </div>
+              )}
 
               {/* Theme toggle */}
               <div

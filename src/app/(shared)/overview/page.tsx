@@ -236,11 +236,11 @@ export default function OverviewPage() {
         }
 
         // ── staff_manager ─────────────────────────────────────────
-        if (user.role === "staff_manager" && user.department_id) {
+        if (user.role === "staff_manager" && user.id) {
           const { data } = await supabase
             .from("submissions")
             .select("status, submitted_at, reviewed_at")
-            .eq("department_id", user.department_id)
+            .eq("submitted_by", user.id)
             .eq("year", year)
             .eq("quarter", q)
             .maybeSingle();
